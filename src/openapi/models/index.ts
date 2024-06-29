@@ -3,6 +3,7 @@
 export * from './AccentPhrase';
 export * from './AudioQuery';
 export * from './BaseLibraryInfo';
+export * from './BodySingFrameVolumeSingFrameVolumePost';
 export * from './CorsPolicyMode';
 export * from './DownloadableLibraryInfo';
 export * from './EngineManifest';
@@ -21,7 +22,6 @@ export * from './Score';
 export * from './Speaker';
 export * from './SpeakerInfo';
 export * from './SpeakerStyle';
-export * from './SpeakerSupportPermittedSynthesisMorphing';
 export * from './SpeakerSupportedFeatures';
 export * from './StyleInfo';
 export * from './SupportedDevicesInfo';

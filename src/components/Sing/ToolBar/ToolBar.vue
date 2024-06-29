@@ -5,32 +5,32 @@
       <CharacterMenuButton />
       <QInput
         type="number"
-        :model-value="keyRangeAdjustmentInputBuffer"
+        :modelValue="keyRangeAdjustmentInputBuffer"
         label="音域調整"
         dense
-        hide-bottom-space
+        hideBottomSpace
         class="key-range-adjustment"
-        @update:model-value="setKeyRangeAdjustmentInputBuffer"
+        @update:modelValue="setKeyRangeAdjustmentInputBuffer"
         @change="setKeyRangeAdjustment"
       />
       <QInput
         type="number"
-        :model-value="volumeRangeAdjustmentInputBuffer"
+        :modelValue="volumeRangeAdjustmentInputBuffer"
         label="声量調整"
         dense
-        hide-bottom-space
+        hideBottomSpace
         class="volume-range-adjustment"
-        @update:model-value="setVolumeRangeAdjustmentInputBuffer"
+        @update:modelValue="setVolumeRangeAdjustmentInputBuffer"
         @change="setVolumeRangeAdjustment"
       />
       <QInput
         type="number"
-        :model-value="bpmInputBuffer"
+        :modelValue="bpmInputBuffer"
         label="テンポ"
         dense
-        hide-bottom-space
+        hideBottomSpace
         class="sing-tempo"
-        @update:model-value="setBpmInputBuffer"
+        @update:modelValue="setBpmInputBuffer"
         @change="setTempo"
       >
         <template #prepend>
@@ -40,23 +40,23 @@
       <div class="sing-beats">
         <QInput
           type="number"
-          :model-value="beatsInputBuffer"
+          :modelValue="beatsInputBuffer"
           label="拍子"
           dense
-          hide-bottom-space
+          hideBottomSpace
           class="sing-time-signature"
-          @update:model-value="setBeatsInputBuffer"
+          @update:modelValue="setBeatsInputBuffer"
           @change="setTimeSignature"
         />
         <div class="sing-beats-separator">/</div>
         <QInput
           type="number"
-          :model-value="beatTypeInputBuffer"
+          :modelValue="beatTypeInputBuffer"
           label=""
           dense
-          hide-bottom-space
+          hideBottomSpace
           class="sing-time-signature"
-          @update:model-value="setBeatTypeInputBuffer"
+          @update:modelValue="setBeatTypeInputBuffer"
           @change="setTimeSignature"
         />
       </div>
@@ -93,14 +93,10 @@
     </div>
     <!-- settings for edit controls -->
     <div class="sing-controls">
-      <QBtn
+      <EditTargetSwicher
         v-if="showEditTargetSwitchButton"
-        dense
-        icon="show_chart"
-        :color="editTarget === 'PITCH' ? 'primary' : undefined"
-        :text-color="editTarget === 'PITCH' ? 'white' : undefined"
-        class="edit-target-switch-button"
-        @click="switchEditTarget"
+        :editTarget
+        :changeEditTarget
       />
       <QBtn
         flat
@@ -128,12 +124,12 @@
         outlined
         color="primary"
         dense
-        text-color="display-on-primary"
-        hide-bottom-space
-        options-dense
+        textColor="display-on-primary"
+        hideBottomSpace
+        optionsDense
         label="スナップ"
-        transition-show="none"
-        transition-hide="none"
+        transitionShow="none"
+        transitionHide="none"
         class="sing-snap"
       />
     </div>
@@ -142,6 +138,7 @@
 
 <script setup lang="ts">
 import { computed, watch, ref, onMounted, onUnmounted } from "vue";
+import EditTargetSwicher from "./EditTargetSwicher.vue";
 import { useStore } from "@/store";
 
 import {
@@ -151,11 +148,11 @@ import {
   isValidBeats,
   isValidBpm,
   isValidKeyRangeAdjustment,
-  isValidvolumeRangeAdjustment,
+  isValidVolumeRangeAdjustment,
 } from "@/sing/domain";
 import CharacterMenuButton from "@/components/Sing/CharacterMenuButton/MenuButton.vue";
 import { useHotkeyManager } from "@/plugins/hotkeyPlugin";
-import { ExhaustiveError } from "@/type/utility";
+import { SequencerEditTarget } from "@/store/type";
 
 const store = useStore();
 
@@ -209,14 +206,8 @@ const showEditTargetSwitchButton = computed(() => {
 
 const editTarget = computed(() => store.state.sequencerEditTarget);
 
-const switchEditTarget = () => {
-  if (editTarget.value === "NOTE") {
-    store.dispatch("SET_EDIT_TARGET", { editTarget: "PITCH" });
-  } else if (editTarget.value === "PITCH") {
-    store.dispatch("SET_EDIT_TARGET", { editTarget: "NOTE" });
-  } else {
-    throw new ExhaustiveError(editTarget.value);
-  }
+const changeEditTarget = (editTarget: SequencerEditTarget) => {
+  store.dispatch("SET_EDIT_TARGET", { editTarget });
 };
 
 const tempos = computed(() => store.state.tempos);
@@ -305,7 +296,7 @@ const setVolumeRangeAdjustmentInputBuffer = (
   volumeRangeAdjustmentStr: string | number | null,
 ) => {
   const volumeRangeAdjustmentValue = Number(volumeRangeAdjustmentStr);
-  if (!isValidvolumeRangeAdjustment(volumeRangeAdjustmentValue)) {
+  if (!isValidVolumeRangeAdjustment(volumeRangeAdjustmentValue)) {
     return;
   }
   volumeRangeAdjustmentInputBuffer.value = volumeRangeAdjustmentValue;
@@ -549,10 +540,6 @@ onUnmounted(() => {
   justify-content: flex-end;
   display: flex;
   flex: 1;
-}
-
-.edit-target-switch-button {
-  margin-right: 6px;
 }
 
 .sing-undo-button,
