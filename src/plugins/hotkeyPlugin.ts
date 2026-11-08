@@ -2,19 +2,20 @@
  * ショートカットキーを管理するプラグイン。
  *
  * HotkeyAction: 実行する処理の名前とコールバックのペア
- * HotkeySetting: ユーザーが設定できるもの。ActionとCobinationのペア
+ * HotkeySetting: ユーザーが設定できるもの。ActionとCombinationのペア
  * Combination: ショートカットキーを文字列で表したもの
  * binding: hotkeys-js に登録したコールバック
  * bindingKey: hotkeys-js で使う、キーの文字列表記
  */
-import { Plugin, inject, onMounted, onUnmounted } from "vue";
+import { type Plugin, inject, onMounted, onUnmounted } from "vue";
 import hotkeys from "hotkeys-js";
 import {
-  HotkeyActionNameType,
+  type HotkeyActionNameType,
   HotkeyCombination,
-  HotkeySettingType,
-} from "@/type/preload";
-import { createLogger } from "@/domain/frontend/log";
+  type HotkeySettingType,
+} from "@/domain/hotkeyAction";
+import { createLogger } from "@/helpers/log";
+import type { Brand } from "@/type/utility";
 
 const hotkeyManagerKey = "hotkeyManager";
 export const useHotkeyManager = () => {
@@ -35,7 +36,7 @@ export const useHotkeyManager = () => {
 
 type Editor = "talk" | "song";
 
-type BindingKey = string & { __brand: "BindingKey" }; // BindingKey専用のブランド型
+type BindingKey = Brand<string, "BindingKey">;
 
 /**
  * ショートカットキーの処理を登録するための型。
@@ -206,7 +207,8 @@ export class HotkeyManager {
               (element.tagName === "INPUT" ||
                 element.tagName === "SELECT" ||
                 element.tagName === "TEXTAREA" ||
-                element.contentEditable === "true")
+                element.contentEditable === "true" ||
+                element.contentEditable === "plaintext-only")
             ) {
               return;
             }
@@ -278,10 +280,12 @@ const combinationToBindingKey = (
   // MetaキーはCommandキーとして扱う
   // NOTE: hotkeys-jsにはWinキーが無く、Commandキーとして扱われている
   // NOTE: Metaキーは以前採用していたmousetrapがそうだった名残り
+  // NOTE: hotkeys-jsでは方向キーのarrowプレフィックスが不要
   const bindingKey = combination
     .toLowerCase()
     .split(" ")
     .map((key) => (key === "meta" ? "command" : key))
+    .map((key) => key.replace("arrow", ""))
     .join("+");
   return bindingKey as BindingKey;
 };
@@ -310,15 +314,18 @@ export const eventToCombination = (event: KeyboardEvent): HotkeyCombination => {
   if (event.metaKey) {
     recordedCombination += "Meta ";
   }
-  if (event.key === " ") {
-    recordedCombination += "Space";
-  } else {
-    if (["Control", "Shift", "Alt", "Meta"].includes(event.key)) {
-      recordedCombination = recordedCombination.slice(0, -1);
-    } else {
-      recordedCombination +=
-        event.key.length > 1 ? event.key : event.key.toUpperCase();
-    }
+  // event.codeからevent.key形式へと変換
+  // TODO: 主要なキーも使えるようにする
+  const eventKey = event.code.replace(/Key|Digit|Numpad/, "");
+  // 英字 数字 上下左右 Enter Space Backspace Delete Escape F1~ - /のみ認める
+  if (
+    /^([A-Z]|\d|Arrow(Up|Down|Left|Right)|Enter|Space|Backspace|Delete|Escape|F\d+|-|\/)$/.test(
+      eventKey,
+    )
+  ) {
+    recordedCombination += eventKey;
   }
+  // 修飾キーのみだった場合末尾がスペースになるので削除
+  recordedCombination = recordedCombination.replace(/\s$/, "");
   return HotkeyCombination(recordedCombination);
 };

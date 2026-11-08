@@ -1,15 +1,15 @@
 import { z } from "zod";
 
 import {
-  audioKeySchema,
   engineIdSchema,
+  noteIdSchema,
   presetKeySchema,
   speakerIdSchema,
   styleIdSchema,
 } from "@/type/preload";
 
 // トーク系のスキーマ
-const moraSchema = z.object({
+export const moraSchema = z.object({
   text: z.string(),
   vowel: z.string(),
   vowelLength: z.number(),
@@ -18,19 +18,20 @@ const moraSchema = z.object({
   consonantLength: z.number().optional(),
 });
 
-const accentPhraseSchema = z.object({
+export const accentPhraseSchema = z.object({
   moras: z.array(moraSchema),
   accent: z.number(),
   pauseMora: moraSchema.optional(),
   isInterrogative: z.boolean().optional(),
 });
 
-const audioQuerySchema = z.object({
+export const audioQuerySchema = z.object({
   accentPhrases: z.array(accentPhraseSchema),
   speedScale: z.number(),
   pitchScale: z.number(),
   intonationScale: z.number(),
   volumeScale: z.number(),
+  pauseLengthScale: z.number(),
   prePhonemeLength: z.number(),
   postPhonemeLength: z.number(),
   outputSamplingRate: z.union([z.number(), z.literal("engineDefault")]),
@@ -38,14 +39,14 @@ const audioQuerySchema = z.object({
   kana: z.string().optional(),
 });
 
-const morphingInfoSchema = z.object({
+export const morphingInfoSchema = z.object({
   rate: z.number(),
   targetEngineId: engineIdSchema,
   targetSpeakerId: speakerIdSchema,
   targetStyleId: styleIdSchema,
 });
 
-const audioItemSchema = z.object({
+export const audioItemSchema = z.object({
   text: z.string(),
   voice: z.object({
     engineId: engineIdSchema,
@@ -70,11 +71,11 @@ export const timeSignatureSchema = z.object({
 });
 
 export const noteSchema = z.object({
-  id: z.string(),
+  id: noteIdSchema,
   position: z.number(),
   duration: z.number(),
   noteNumber: z.number(),
-  lyric: z.string(),
+  lyric: z.string().nullable(), // 歌詞未入力のときはnull
 });
 
 export const singerSchema = z.object({
@@ -82,29 +83,34 @@ export const singerSchema = z.object({
   styleId: styleIdSchema,
 });
 
+export const singingTeacherSchema = z.object({
+  // TODO: 歌い方設定UIをまずは実装するため、現状はシンガーと歌い方教師が
+  // 同一エンジンを使用する前提で、歌い方教師にはstyleIdのみを保持している。
+  // 実際のマルチエンジン環境でどう扱うかは未調査で、また型として妥当かも仮でしかないため、仕様を整理してから修正する
+  styleId: styleIdSchema,
+});
+
+export const phonemeTimingEditSchema = z.object({
+  phonemeIndexInNote: z.number(), // ノート内での音素の順番
+  offsetSeconds: z.number(), // 単位は秒
+});
+
+/** 元のボリュームからのdB変化量。データが無いところはnull。 */
+export const volumeEditValueSchema = z.number().nullable();
+
 export const trackSchema = z.object({
+  name: z.string(),
   singer: singerSchema.optional(),
+  singingTeacher: singingTeacherSchema.optional(),
   keyRangeAdjustment: z.number(), // 音域調整量
   volumeRangeAdjustment: z.number(), // 声量調整量
   notes: z.array(noteSchema),
   pitchEditData: z.array(z.number()), // 値の単位はHzで、データが無いところはVALUE_INDICATING_NO_DATAの値
-});
+  volumeEditData: z.array(volumeEditValueSchema),
+  phonemeTimingEditData: z.map(noteIdSchema, z.array(phonemeTimingEditSchema)), // 音素タイミングの編集データはノートと紐づけて保持
 
-// プロジェクトファイルのスキーマ
-export const projectSchema = z.object({
-  appVersion: z.string(),
-  talk: z.object({
-    // description: "Attribute keys of audioItems.",
-    audioKeys: z.array(audioKeySchema),
-    // description: "VOICEVOX states per cell",
-    audioItems: z.record(audioKeySchema, audioItemSchema),
-  }),
-  song: z.object({
-    tpqn: z.number(),
-    tempos: z.array(tempoSchema),
-    timeSignatures: z.array(timeSignatureSchema),
-    tracks: z.array(trackSchema),
-  }),
+  solo: z.boolean(),
+  mute: z.boolean(),
+  gain: z.number(),
+  pan: z.number(),
 });
-
-export type LatestProjectType = z.infer<typeof projectSchema>;

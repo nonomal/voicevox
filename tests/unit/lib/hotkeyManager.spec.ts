@@ -1,6 +1,13 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { HotkeyManager, HotkeysJs, HotkeyAction } from "@/plugins/hotkeyPlugin";
-import { HotkeyCombination, HotkeySettingType } from "@/type/preload";
+import {
+  HotkeyManager,
+  type HotkeysJs,
+  type HotkeyAction,
+} from "@/plugins/hotkeyPlugin";
+import {
+  HotkeyCombination,
+  type HotkeySettingType,
+} from "@/domain/hotkeyAction";
 
 type DummyHotkeysJs = HotkeysJs & {
   registeredHotkeys: {
@@ -47,6 +54,7 @@ const createHotkeyManager = (): {
   };
 };
 
+// eslint-disable-next-line vitest/expect-expect
 it("registerできる", () => {
   const { hotkeyManager } = createHotkeyManager();
   hotkeyManager.register({

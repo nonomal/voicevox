@@ -1,8 +1,8 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * VOICEVOX Engine
- * VOICEVOXの音声合成エンジンです。
+ * VOICEVOX ENGINE OSS
+ * VOICEVOX OSS の音声合成エンジンです。
  *
  * The version of the OpenAPI document: latest
  * 
@@ -14,49 +14,49 @@
 
 import { exists, mapValues } from '../runtime';
 /**
- * vvlib(VOICEVOX Library)に関する情報
+ * vvlib(VOICEVOX Library)に関する情報。
  * @export
  * @interface VvlibManifest
  */
 export interface VvlibManifest {
     /**
-     * 
+     * マニフェストバージョン
      * @type {string}
      * @memberof VvlibManifest
      */
     manifestVersion: string;
     /**
-     * 
+     * 音声ライブラリ名
      * @type {string}
      * @memberof VvlibManifest
      */
     name: string;
     /**
-     * 
+     * 音声ライブラリバージョン
      * @type {string}
      * @memberof VvlibManifest
      */
     version: string;
     /**
-     * 
+     * 音声ライブラリのUUID
      * @type {string}
      * @memberof VvlibManifest
      */
     uuid: string;
     /**
-     * 
+     * エンジンのブランド名
      * @type {string}
      * @memberof VvlibManifest
      */
     brandName: string;
     /**
-     * 
+     * エンジン名
      * @type {string}
      * @memberof VvlibManifest
      */
     engineName: string;
     /**
-     * 
+     * エンジンのUUID
      * @type {string}
      * @memberof VvlibManifest
      */

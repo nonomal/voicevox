@@ -1,8 +1,8 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * VOICEVOX Engine
- * VOICEVOXの音声合成エンジンです。
+ * VOICEVOX ENGINE OSS
+ * VOICEVOX OSS の音声合成エンジンです。
  *
  * The version of the OpenAPI document: latest
  * 
@@ -21,43 +21,43 @@ import {
 } from './LibrarySpeaker';
 
 /**
- * 音声ライブラリの情報
+ * 音声ライブラリの情報。
  * @export
  * @interface BaseLibraryInfo
  */
 export interface BaseLibraryInfo {
     /**
-     * 
+     * 音声ライブラリの名前
      * @type {string}
      * @memberof BaseLibraryInfo
      */
     name: string;
     /**
-     * 
+     * 音声ライブラリのUUID
      * @type {string}
      * @memberof BaseLibraryInfo
      */
     uuid: string;
     /**
-     * 
+     * 音声ライブラリのバージョン
      * @type {string}
      * @memberof BaseLibraryInfo
      */
     version: string;
     /**
-     * 
+     * 音声ライブラリのダウンロードURL
      * @type {string}
      * @memberof BaseLibraryInfo
      */
     downloadUrl: string;
     /**
-     * 
+     * 音声ライブラリのバイト数
      * @type {number}
      * @memberof BaseLibraryInfo
      */
     bytes: number;
     /**
-     * 
+     * 音声ライブラリに含まれるキャラクターのリスト
      * @type {Array<LibrarySpeaker>}
      * @memberof BaseLibraryInfo
      */

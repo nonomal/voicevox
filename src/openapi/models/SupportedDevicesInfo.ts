@@ -1,8 +1,8 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * VOICEVOX Engine
- * VOICEVOXの音声合成エンジンです。
+ * VOICEVOX ENGINE OSS
+ * VOICEVOX OSS の音声合成エンジンです。
  *
  * The version of the OpenAPI document: latest
  * 
@@ -14,25 +14,25 @@
 
 import { exists, mapValues } from '../runtime';
 /**
- * 対応しているデバイスの情報
+ * 対応しているデバイスの情報。
  * @export
  * @interface SupportedDevicesInfo
  */
 export interface SupportedDevicesInfo {
     /**
-     * 
+     * CPUに対応しているか
      * @type {boolean}
      * @memberof SupportedDevicesInfo
      */
     cpu: boolean;
     /**
-     * 
+     * CUDA(Nvidia GPU)に対応しているか
      * @type {boolean}
      * @memberof SupportedDevicesInfo
      */
     cuda: boolean;
     /**
-     * 
+     * DirectML(Nvidia GPU/Radeon GPU等)に対応しているか
      * @type {boolean}
      * @memberof SupportedDevicesInfo
      */

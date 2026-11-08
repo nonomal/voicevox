@@ -1,10 +1,10 @@
 <template>
-  <QDialog v-model="modelValueComputed">
+  <QDialog v-model="dialogOpened">
     <QCard class="q-py-sm q-px-md dialog-card">
       <QCardSection>
-        <div class="text-h5">アップデートのお知らせ</div>
+        <div class="text-h5">{{ props.title }}</div>
         <div class="text-body2 text-grey-8">
-          公式サイトから最新バージョンをダウンロードできます。
+          {{ props.description }}
         </div>
       </QCardSection>
 
@@ -36,7 +36,7 @@
           label="閉じる"
           unelevated
           color="surface"
-          text-color="display"
+          textColor="display"
           class="q-mt-sm"
           @click="closeUpdateNotificationDialog()"
         />
@@ -45,22 +45,22 @@
           label="このバージョンをスキップ"
           unelevated
           color="surface"
-          text-color="display"
+          textColor="display"
           class="q-mt-sm"
           @click="
-            onSkipThisVersionClick(props.latestVersion);
+            emit('skipThisVersionClick', props.latestVersion);
             closeUpdateNotificationDialog();
           "
         />
         <QBtn
           padding="xs md"
-          label="公式サイトを開く"
+          :label="props.updateButtonLabel"
           unelevated
           color="primary"
-          text-color="display-on-primary"
+          textColor="display-on-primary"
           class="q-mt-sm"
           @click="
-            openOfficialWebsite();
+            emit('updateClick');
             closeUpdateNotificationDialog();
           "
         />
@@ -70,30 +70,30 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
-import { UpdateInfo } from "@/type/preload";
+import type { UpdateInfo } from "@/type/preload";
 
+const dialogOpened = defineModel<boolean>("dialogOpened", { default: false });
 const props = defineProps<{
-  modelValue: boolean;
+  /** ダイアログのタイトル */
+  title: string;
+  /** ダイアログの説明 */
+  description: string;
+  /** アップデートボタンのラベル */
+  updateButtonLabel: string;
+  /** 公開されている最新のバージョン */
   latestVersion: string;
+  /** 表示するアップデート情報 */
   newUpdateInfos: UpdateInfo[];
-  onSkipThisVersionClick: (version: string) => void;
 }>();
 const emit = defineEmits<{
-  (e: "update:modelValue", value: boolean): void;
+  /** スキップするときに呼ばれる */
+  (e: "skipThisVersionClick", version: string): void;
+  /** アップデートするときに呼ばれる */
+  (e: "updateClick"): void;
 }>();
 
-const modelValueComputed = computed({
-  get: () => props.modelValue,
-  set: (val) => emit("update:modelValue", val),
-});
-
 const closeUpdateNotificationDialog = () => {
-  modelValueComputed.value = false;
-};
-
-const openOfficialWebsite = () => {
-  window.open(import.meta.env.VITE_OFFICIAL_WEBSITE_URL, "_blank");
+  dialogOpened.value = false;
 };
 </script>
 

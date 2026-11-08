@@ -1,16 +1,41 @@
-import path from "path";
-import { Platform } from "quasar";
-import { diffArrays } from "diff";
-import {
+import * as diff from "fast-array-diff";
+import type {
   CharacterInfo,
+  PresetSliderKey,
+  StyleId,
   StyleInfo,
   StyleType,
   ToolbarButtonTagType,
-  isMac,
 } from "@/type/preload";
-import { AccentPhrase, Mora } from "@/openapi";
+import type { SingingTeacher } from "@/domain/project/type";
+import type { AccentPhrase, Mora } from "@/openapi";
+import { cloneWithUnwrapProxy } from "@/helpers/cloneWithUnwrapProxy";
+import { DEFAULT_TRACK_NAME, isVowel } from "@/song/domain";
+import { isMac } from "@/helpers/platform";
+import { generateTextFileData } from "@/helpers/fileDataGenerator";
+import path from "@/helpers/path";
 
 export const DEFAULT_STYLE_NAME = "ノーマル";
+export const DEFAULT_PROJECT_NAME = "Untitled";
+
+/**
+ * 指定されたファイルパスに対応するファイルが既に存在する場合、
+ * ファイル名に連番のサフィックスを追加してユニークなファイルパスを生成する。
+ */
+export async function generateUniqueFilePath(filePath: string) {
+  const extension = path.extname(filePath);
+  const filePathWithoutExtension = filePath.slice(
+    0,
+    filePath.length - extension.length,
+  );
+  let uniqueFilePath = filePath;
+  let tail = 1;
+  while (await window.backend.checkFileExists(uniqueFilePath)) {
+    uniqueFilePath = `${filePathWithoutExtension}[${tail}]${extension}`;
+    tail += 1;
+  }
+  return uniqueFilePath;
+}
 
 export const formatCharacterStyleName = (
   characterName: string,
@@ -39,14 +64,23 @@ export function sanitizeFileName(fileName: string): string {
   return fileName.replace(sanitizer, "");
 }
 
+type SliderParameter = {
+  max: () => number;
+  min: () => number;
+  step: () => number;
+  scrollStep: () => number;
+  scrollMinStep?: () => number;
+};
+
 /**
  * AudioInfoコンポーネントに表示されるパラメータ
+ * TODO: src/domain/talk.ts辺りに切り出す
  */
-export const SLIDER_PARAMETERS = {
+export const SLIDER_PARAMETERS: Record<PresetSliderKey, SliderParameter> = {
   /**
    * 話速パラメータの定義
    */
-  SPEED: {
+  speedScale: {
     max: () => 2,
     min: () => 0.5,
     step: () => 0.01,
@@ -56,7 +90,7 @@ export const SLIDER_PARAMETERS = {
   /**
    * 音高パラメータの定義
    */
-  PITCH: {
+  pitchScale: {
     max: () => 0.15,
     min: () => -0.15,
     step: () => 0.01,
@@ -65,7 +99,7 @@ export const SLIDER_PARAMETERS = {
   /**
    *  抑揚パラメータの定義
    */
-  INTONATION: {
+  intonationScale: {
     max: () => 2,
     min: () => 0,
     step: () => 0.01,
@@ -75,7 +109,17 @@ export const SLIDER_PARAMETERS = {
   /**
    *  音量パラメータの定義
    */
-  VOLUME: {
+  volumeScale: {
+    max: () => 2,
+    min: () => 0,
+    step: () => 0.01,
+    scrollStep: () => 0.1,
+    scrollMinStep: () => 0.01,
+  },
+  /**
+   *  文内無音(倍率)パラメータの定義
+   */
+  pauseLengthScale: {
     max: () => 2,
     min: () => 0,
     step: () => 0.01,
@@ -85,7 +129,7 @@ export const SLIDER_PARAMETERS = {
   /**
    *  開始無音パラメータの定義
    */
-  PRE_PHONEME_LENGTH: {
+  prePhonemeLength: {
     max: () => 1.5,
     min: () => 0,
     step: () => 0.01,
@@ -95,7 +139,7 @@ export const SLIDER_PARAMETERS = {
   /**
    *  終了無音パラメータの定義
    */
-  POST_PHONEME_LENGTH: {
+  postPhonemeLength: {
     max: () => 1.5,
     min: () => 0,
     step: () => 0.01,
@@ -105,7 +149,7 @@ export const SLIDER_PARAMETERS = {
   /**
    *  モーフィングレートパラメータの定義
    */
-  MORPHING_RATE: {
+  morphingRate: {
     max: () => 1,
     min: () => 0,
     step: () => 0.01,
@@ -120,42 +164,85 @@ export const replaceTagIdToTagString = {
   styleName: "スタイル",
   text: "テキスト",
   date: "日付",
+  projectName: "プロジェクト名",
+  trackName: "トラック名",
 };
-const replaceTagStringToTagId: { [tagString: string]: string } = Object.entries(
+const replaceTagStringToTagId: Record<string, string> = Object.entries(
   replaceTagIdToTagString,
 ).reduce((prev, [k, v]) => ({ ...prev, [v]: k }), {});
 
-export const DEFAULT_AUDIO_FILE_BASE_NAME_TEMPLATE =
+export const DEFAULT_AUDIO_FILE_NAME_TEMPLATE =
   "$連番$_$キャラ$（$スタイル$）_$テキスト$";
-export const DEFAULT_AUDIO_FILE_NAME_TEMPLATE = `${DEFAULT_AUDIO_FILE_BASE_NAME_TEMPLATE}.wav`;
 const DEFAULT_AUDIO_FILE_NAME_VARIABLES = {
   index: 0,
   characterName: "四国めたん",
   text: "テキストテキストテキスト",
   styleName: DEFAULT_STYLE_NAME,
   date: currentDateString(),
+  projectName: "VOICEVOXプロジェクト",
+};
+
+export const DEFAULT_SONG_AUDIO_FILE_NAME_TEMPLATE =
+  "$連番$_$キャラ$（$スタイル$）_$トラック名$";
+const DEFAULT_SONG_AUDIO_FILE_NAME_VARIABLES = {
+  index: 0,
+  characterName: "四国めたん",
+  trackName: DEFAULT_TRACK_NAME,
+  styleName: DEFAULT_STYLE_NAME,
+  date: currentDateString(),
+  projectName: "VOICEVOXプロジェクト",
 };
 
 export function currentDateString(): string {
   const currentDate = new Date();
   const year = currentDate.getFullYear();
-  const month = currentDate.getMonth().toString().padStart(2, "0");
+  // NOTE: getMonth()は0から始まるので1を足す
+  const month = (currentDate.getMonth() + 1).toString().padStart(2, "0");
   const date = currentDate.getDate().toString().padStart(2, "0");
 
   return `${year}${month}${date}`;
 }
 
+/** 文字数指定がないときに切り詰めるタグと、その文字数 */
+const DEFAULT_TAG_MAX_LENGTHS: Record<string, number> = {
+  text: 10,
+  trackName: 10,
+};
+
+/** 文字数を超えていたら末尾を「…」にして切り詰める */
+function truncateWithEllipsis(text: string, maxLength: number): string {
+  if (text.length <= maxLength) {
+    return text;
+  }
+  return text.substring(0, maxLength - 1) + "…";
+}
+
+/**
+ * テンプレート内のタグを置換する。
+ * 「$テキスト[20]$」のようにタグ名の後ろに[文字数]を付けると、その文字数で切り詰める。
+ * 文字数は1〜99で指定できる。
+ */
 function replaceTag(
   template: string,
-  replacer: { [key: string]: string },
+  replacer: Record<string, string>,
 ): string {
-  const result = template.replace(/\$(.+?)\$/g, (match, p1) => {
-    const replaceTagId = replaceTagStringToTagId[p1];
-    if (replaceTagId == undefined) {
-      return match;
-    }
-    return replacer[replaceTagId] ?? "";
-  });
+  const result = template.replace(
+    /\$([^$[\]]+?)(?:\[([1-9][0-9]?)\])?\$/g,
+    (match, tagString: string, maxLengthString: string | undefined) => {
+      const replaceTagId = replaceTagStringToTagId[tagString];
+      if (replaceTagId == undefined) {
+        return match;
+      }
+      const value = replacer[replaceTagId] ?? "";
+      const maxLength =
+        maxLengthString != undefined
+          ? Number(maxLengthString)
+          : DEFAULT_TAG_MAX_LENGTHS[replaceTagId];
+      return maxLength != undefined
+        ? truncateWithEllipsis(value, maxLength)
+        : value;
+    },
+  );
 
   return result;
 }
@@ -216,8 +303,7 @@ function skipMemoText(targettext: string): string {
 }
 
 /**
- * 2つのアクセント句配列を比べて同じだと思われるモーラの調整結果を転写し
- * 変更前のアクセント句の調整結果を変更後のアクセント句に保持する。
+ * 調整したモーラのパラメーターがリセットされるのを防ぐ
  *
  * <例>
  * 「こんにちは」 -> 「こんばんは」と変更した場合、[]に囲まれる部分で変更前のモーラが転写される。
@@ -227,85 +313,39 @@ export class TuningTranscription {
   beforeAccent: AccentPhrase[];
   afterAccent: AccentPhrase[];
   constructor(beforeAccent: AccentPhrase[], afterAccent: AccentPhrase[]) {
-    this.beforeAccent = JSON.parse(JSON.stringify(beforeAccent));
-    this.afterAccent = JSON.parse(JSON.stringify(afterAccent));
-  }
-
-  private createFlatArray<T, K extends keyof T>(
-    collection: T[],
-    key: K,
-  ): T[K] extends (infer U)[] ? U[] : T[K][] {
-    const result = [];
-    for (const element of collection) {
-      const value = element[key];
-      if (Array.isArray(value)) {
-        result.push(...value);
-      } else {
-        result.push(value);
-      }
-    }
-    return result as T[K] extends (infer U)[] ? U[] : T[K][];
+    this.beforeAccent = cloneWithUnwrapProxy(beforeAccent);
+    this.afterAccent = cloneWithUnwrapProxy(afterAccent);
   }
 
   /**
-   * 変更前の配列を操作してpatchMora配列を作る。
-   *
-   * <例> (Ｕはundefined）
-   * 変更前 [ ズ, ン, ダ, モ, ン, ナ, ノ, ダ ]
-   * 変更後 [ ボ, ク, ズ, ン, ダ, ナ, ノ, デ, ス ]
-   *
-   * 再利用される文字列とundefinedで構成されたデータを作る。
-   *       [ Ｕ, Ｕ, ズ, ン, ダ, ナ, ノ, Ｕ, Ｕ ]
-   *
-   * 実際には"ズ"などの文字列部分は{text: "ズ"...}のようなデータ構造になっている。
-   * [ Ｕ, Ｕ, {text: "ズ"...}, {text: "ン"...}, {text: "ダ"...}, {text: "ナ"...}, {text: "ノ"...}, Ｕ, Ｕ ]
+   * 変更前と変更後のAccentPhraseに存在するモーラの差分を取得し
+   * 変更内容を適用したモーラの配列を返す
    */
-  private createDiffPatch() {
+  private createTranscriptionSource() {
     const before = structuredClone(this.beforeAccent);
     const after = structuredClone(this.afterAccent);
+    const beforeFlatArray = before.flatMap((accent) => accent.moras);
+    const afterFlatArray = after.flatMap((accent) => accent.moras);
 
-    const beforeFlatArray = this.createFlatArray(before, "moras");
-    const afterFlatArray = this.createFlatArray(after, "moras");
-    const diffed = diffArrays(
-      this.createFlatArray(beforeFlatArray, "text"),
-      this.createFlatArray(afterFlatArray, "text"),
+    // beforeFlatArrayとafterFlatArrayの特定の要素が一致するかどうかを判定する関数
+    const matchRequirements = (beforeMora: Mora, afterMora: Mora) =>
+      beforeMora?.text === afterMora?.text;
+
+    const morasDiff = diff.getPatch(
+      beforeFlatArray,
+      afterFlatArray,
+      matchRequirements,
     );
 
-    // FIXME: beforeFlatArrayを破壊的に変更しなくても良いようにしてasを不要にする
-    let currentTextIndex = 0;
-    for (const diff of diffed) {
-      if (diff.removed) {
-        beforeFlatArray.splice(currentTextIndex, diff.count);
-      } else if (diff.added) {
-        diff.value.forEach(() => {
-          beforeFlatArray.splice(
-            currentTextIndex,
-            0,
-            undefined as never as Mora,
-          );
-          currentTextIndex++;
-        });
-      } else {
-        currentTextIndex += diff.value.length;
-      }
-    }
-    return beforeFlatArray as (Mora | undefined)[];
+    return diff.applyPatch(beforeFlatArray, morasDiff);
   }
 
   /**
-   * moraPatchとafterAccentを比較し、textが一致するモーラを転写する。
-   *
-   *  <例> (「||」は等号記号を表す)
-   * 「こんにちは」 -> 「こんばんは」 とテキストを変更した場合、以下の例のように比較する。
-   *
-   *           moraPatch = [ {text: "コ"...}, {text: "ン"...}, undefined      , undefined      , {text: "ハ"...} ]
-   *                              ||                ||                                                ||
-   * after[...]["moras"] = [ {text: "コ"...}, {text: "ン"...}, {text: "バ"...}, {text: "ン"...}, {text: "ハ"...} ]
-   *
-   * あとは一致したモーラを転写するだけ。
-   *
+   * transcriptionSourceのモーラ配列のうち、テキストが一致するものを変更後のAccentPhraseの各モーラに適用する
    */
-  private mergeAccentPhrases(moraPatch: (Mora | undefined)[]): AccentPhrase[] {
+  private applyTranscriptionSource(
+    transcriptionSource: Mora[],
+  ): AccentPhrase[] {
     const after: AccentPhrase[] = structuredClone(this.afterAccent);
     let moraPatchIndex = 0;
 
@@ -316,18 +356,12 @@ export class TuningTranscription {
         moraIndex < after[accentIndex]["moras"].length;
         moraIndex++
       ) {
-        // undefinedのとき、何もせず次のモーラへ移動
-        if (moraPatch[moraPatchIndex] == undefined) {
-          moraPatchIndex++;
-          continue;
-        }
         if (
           after[accentIndex]["moras"][moraIndex].text ===
-          moraPatch[moraPatchIndex]?.text
+          transcriptionSource[moraPatchIndex]?.text
         ) {
-          after[accentIndex]["moras"][moraIndex] = moraPatch[
-            moraPatchIndex
-          ] as Mora;
+          after[accentIndex]["moras"][moraIndex] =
+            transcriptionSource[moraPatchIndex];
         }
         moraPatchIndex++;
       }
@@ -337,8 +371,8 @@ export class TuningTranscription {
   }
 
   transcribe() {
-    const moraPatch = this.createDiffPatch();
-    return this.mergeAccentPhrases(moraPatch as never);
+    const transcriptionSource = this.createTranscriptionSource();
+    return this.applyTranscriptionSource(transcriptionSource);
   }
 }
 
@@ -376,6 +410,33 @@ export function isAccentPhrasesTextDifferent(
   return false;
 }
 
+function formatCommonFileNameFromRawData(commonVars: {
+  characterName: string;
+  index: number;
+  styleName: string;
+  date: string;
+  projectName: string;
+}): {
+  characterName: string;
+  index: string;
+  styleName: string;
+  date: string;
+  projectName: string;
+} {
+  const characterName = sanitizeFileName(commonVars.characterName);
+  const index = (commonVars.index + 1).toString().padStart(3, "0");
+  const styleName = sanitizeFileName(commonVars.styleName);
+  const date = commonVars.date;
+  const projectName = sanitizeFileName(commonVars.projectName);
+  return {
+    characterName,
+    index,
+    styleName,
+    date,
+    projectName,
+  };
+}
+
 export function buildAudioFileNameFromRawData(
   fileNamePattern = DEFAULT_AUDIO_FILE_NAME_TEMPLATE,
   vars = DEFAULT_AUDIO_FILE_NAME_VARIABLES,
@@ -386,21 +447,33 @@ export function buildAudioFileNameFromRawData(
     pattern = DEFAULT_AUDIO_FILE_NAME_TEMPLATE;
   }
 
-  let text = sanitizeFileName(vars.text);
-  if (text.length > 10) {
-    text = text.substring(0, 9) + "…";
+  const text = sanitizeFileName(vars.text);
+
+  const commonVars = formatCommonFileNameFromRawData(vars);
+
+  return replaceTag(pattern, {
+    ...commonVars,
+    text,
+  });
+}
+
+export function buildSongTrackAudioFileNameFromRawData(
+  fileNamePattern = DEFAULT_SONG_AUDIO_FILE_NAME_TEMPLATE,
+  vars = DEFAULT_SONG_AUDIO_FILE_NAME_VARIABLES,
+): string {
+  let pattern = fileNamePattern;
+  if (pattern === "") {
+    // ファイル名指定のオプションが初期値("")ならデフォルトテンプレートを使う
+    pattern = DEFAULT_SONG_AUDIO_FILE_NAME_TEMPLATE;
   }
 
-  const characterName = sanitizeFileName(vars.characterName);
-  const index = (vars.index + 1).toString().padStart(3, "0");
-  const styleName = sanitizeFileName(vars.styleName);
-  const date = vars.date;
+  const trackName = sanitizeFileName(vars.trackName);
+
+  const commonVars = formatCommonFileNameFromRawData(vars);
+
   return replaceTag(pattern, {
-    text,
-    characterName,
-    index,
-    styleName,
-    date,
+    ...commonVars,
+    trackName,
   });
 }
 
@@ -432,67 +505,6 @@ export const getToolbarButtonName = (tag: ToolbarButtonTagType): string => {
   return tag2NameObj[tag];
 };
 
-export const createKanaRegex = (includeSeparation?: boolean): RegExp => {
-  // 以下の文字のみで構成される場合、「読み仮名」としてこれを処理する
-  // includeSeparationがtrueの時は、読点(U+3001)とクエスチョン(U+FF1F)も含む
-  //  * ひらがな(U+3041~U+3094)
-  //  * カタカナ(U+30A1~U+30F4)
-  //  * 全角長音(U+30FC)
-  if (includeSeparation) {
-    return /^[\u3041-\u3094\u30A1-\u30F4\u30FC\u3001\uFF1F]+$/;
-  }
-  return /^[\u3041-\u3094\u30A1-\u30F4\u30FC]+$/;
-};
-
-export const convertHiraToKana = (text: string): string => {
-  return text.replace(/[\u3041-\u3094]/g, (s) => {
-    return String.fromCharCode(s.charCodeAt(0) + 0x60);
-  });
-};
-
-export const convertLongVowel = (text: string): string => {
-  return text
-    .replace(/(?<=[アカサタナハマヤラワャァガザダバパ]ー*)ー/g, "ア")
-    .replace(/(?<=[イキシチニヒミリィギジヂビピ]ー*)ー/g, "イ")
-    .replace(/(?<=[ウクスツヌフムユルュゥヴグズヅブプ]ー*)ー/g, "ウ")
-    .replace(/(?<=[エケセテネヘメレェゲゼデベペ]ー*)ー/g, "エ")
-    .replace(/(?<=[オコソトノホモヨロヲョォゴゾドボポ]ー*)ー/g, "オ")
-    .replace(/(?<=[ン]ー*)ー/g, "ン")
-    .replace(/(?<=[ッ]ー*)ー/g, "ッ")
-    .replace(/(?<=[あかさたなはまやらわゃぁがざだばぱ]ー*)ー/g, "あ")
-    .replace(/(?<=[いきしちにひみりぃぎじぢびぴ]ー*)ー/g, "い")
-    .replace(/(?<=[うくすつぬふむゆるゅぅぐずづぶぷ]ー*)ー/g, "う")
-    .replace(/(?<=[えけせてねへめれぇげぜでべぺ]ー*)ー/g, "え")
-    .replace(/(?<=[おこそとのほもよろをょぉごぞどぼぽ]ー*)ー/g, "お")
-    .replace(/(?<=[ん]ー*)ー/g, "ん")
-    .replace(/(?<=[っ]ー*)ー/g, "っ");
-};
-
-// based on https://github.com/BBWeb/path-browserify/blob/win-version/index.js
-export const getBaseName = (filePath: string) => {
-  if (!Platform.is.win) return path.basename(filePath);
-
-  const splitDeviceRegex =
-    /^([a-zA-Z]:|[\\/]{2}[^\\/]+[\\/]+[^\\/]+)?([\\/])?([\s\S]*?)$/;
-  const splitTailRegex =
-    /^([\s\S]*?)((?:\.{1,2}|[^\\/]+?|)(\.[^./\\]*|))(?:[\\/]*)$/;
-
-  const resultOfSplitDeviceRegex = splitDeviceRegex.exec(filePath);
-  if (
-    resultOfSplitDeviceRegex == undefined ||
-    resultOfSplitDeviceRegex.length < 3
-  )
-    return "";
-  const tail = resultOfSplitDeviceRegex[3] || "";
-
-  const resultOfSplitTailRegex = splitTailRegex.exec(tail);
-  if (resultOfSplitTailRegex == undefined || resultOfSplitTailRegex.length < 2)
-    return "";
-  const basename = resultOfSplitTailRegex[2] || "";
-
-  return basename;
-};
-
 /**
  * Macでの`command`キー、またはその他OSでの`Ctrl`キーが押されているなら`true`を返します。
  */
@@ -505,14 +517,61 @@ export const isOnCommandOrCtrlKeyDown = (event: {
 }) => (isMac && event.metaKey) || (!isMac && event.ctrlKey);
 
 /**
- * スタイルがシングエディタで利用可能なスタイルかどうかを判定します。
+ * スタイルが歌い方の生成に利用可能かどうかを判定します。
  */
-export const isSingingStyle = (styleInfo: StyleInfo) => {
+export const isSingingTeacherStyle = (styleInfo: StyleInfo) => {
   return (
-    styleInfo.styleType === "frame_decode" ||
-    styleInfo.styleType === "sing" ||
-    styleInfo.styleType === "singing_teacher"
+    styleInfo.styleType === "singing_teacher" || styleInfo.styleType === "sing"
   );
+};
+
+/**
+ * 歌手に対して初期値として設定する歌い方を返します。無ければundefinedを返します。
+ */
+export const findInitialSingingTeacher = (
+  singerStyleId: StyleId,
+  engineCharacterInfos: CharacterInfo[],
+): SingingTeacher | undefined => {
+  const singerCharacterStyles =
+    engineCharacterInfos.find((characterInfo) =>
+      characterInfo.metas.styles.some(
+        (styleInfo) => styleInfo.styleId === singerStyleId,
+      ),
+    )?.metas.styles ?? [];
+  const engineStyles = engineCharacterInfos.flatMap(
+    (characterInfo) => characterInfo.metas.styles,
+  );
+
+  // 優先順: 歌手自身のスタイル → 同じキャラクターのスタイル → 同じエンジンの他キャラクターのスタイル
+  const teacherStyle = [
+    ...singerCharacterStyles.filter(
+      (styleInfo) => styleInfo.styleId === singerStyleId,
+    ),
+    ...singerCharacterStyles,
+    ...engineStyles,
+  ].find(isSingingTeacherStyle);
+
+  return teacherStyle == undefined
+    ? undefined
+    : { styleId: teacherStyle.styleId };
+};
+
+/**
+ * CharacterInfo内のスタイルを条件で絞り込み、該当スタイルがないキャラクターを除外します。
+ */
+export const filterCharacterInfosByStyle = (
+  characterInfos: CharacterInfo[],
+  predicate: (styleInfo: StyleInfo) => boolean,
+): CharacterInfo[] => {
+  return characterInfos
+    .map((characterInfo) => ({
+      ...characterInfo,
+      metas: {
+        ...characterInfo.metas,
+        styles: characterInfo.metas.styles.filter(predicate),
+      },
+    }))
+    .filter((characterInfo) => characterInfo.metas.styles.length > 0);
 };
 
 /**
@@ -525,25 +584,47 @@ export const filterCharacterInfosByStyleType = (
   characterInfos: CharacterInfo[],
   styleType: StyleType | "singerLike",
 ): CharacterInfo[] => {
-  const withStylesFiltered: CharacterInfo[] = characterInfos.map(
-    (characterInfo) => {
-      const styles = characterInfo.metas.styles.filter((styleInfo) => {
-        if (styleType === "singerLike") {
-          return isSingingStyle(styleInfo);
-        }
-        // 過去のエンジンにはstyleTypeが存在しないので、「singerLike以外」をtalkとして扱っている。
-        if (styleType === "talk") {
-          return !isSingingStyle(styleInfo);
-        }
-        return styleInfo.styleType === styleType;
-      });
-      return { ...characterInfo, metas: { ...characterInfo.metas, styles } };
-    },
-  );
-
-  const withoutEmptyStyles = withStylesFiltered.filter(
-    (characterInfo) => characterInfo.metas.styles.length > 0,
-  );
-
-  return withoutEmptyStyles;
+  return filterCharacterInfosByStyle(characterInfos, (styleInfo) => {
+    if (styleType === "singerLike") {
+      return (
+        styleInfo.styleType === "frame_decode" || styleInfo.styleType === "sing"
+      );
+    }
+    // 過去のエンジンにはstyleTypeが存在しないので、「singerLike以外」をtalkとして扱っている。
+    if (styleType === "talk") {
+      return (
+        styleInfo.styleType !== "frame_decode" &&
+        styleInfo.styleType !== "singing_teacher" &&
+        styleInfo.styleType !== "sing"
+      );
+    }
+    return styleInfo.styleType === styleType;
+  });
 };
+
+export type PhonemeTimingLabel = {
+  startTime: number;
+  endTime: number;
+  phoneme: string;
+};
+
+export async function generateLabelFileData(labels: PhonemeTimingLabel[]) {
+  let labString = "";
+
+  for (const label of labels) {
+    // NOTE: 時刻は100ns単位に変換する
+    const startTime = label.startTime * 1e7;
+    const endTime = label.endTime * 1e7;
+
+    let phoneme = label.phoneme;
+    if (isVowel(label.phoneme) && label.phoneme !== "N") {
+      phoneme = phoneme.toLowerCase();
+    }
+
+    labString += startTime.toFixed() + " ";
+    labString += endTime.toFixed() + " ";
+    labString += phoneme + "\n";
+  }
+
+  return await generateTextFileData({ text: labString });
+}

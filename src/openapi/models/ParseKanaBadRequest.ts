@@ -1,8 +1,8 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * VOICEVOX Engine
- * VOICEVOXの音声合成エンジンです。
+ * VOICEVOX ENGINE OSS
+ * VOICEVOX OSS の音声合成エンジンです。
  *
  * The version of the OpenAPI document: latest
  * 
@@ -14,18 +14,20 @@
 
 import { exists, mapValues } from '../runtime';
 /**
- * 
+ * 読み仮名のパースに失敗した。
  * @export
  * @interface ParseKanaBadRequest
  */
 export interface ParseKanaBadRequest {
     /**
-     * 
+     * エラーメッセージ
      * @type {string}
      * @memberof ParseKanaBadRequest
      */
     text: string;
     /**
+     * エラー名
+     * 
      * |name|description|
      * |---|---|
      * | UNKNOWN_TEXT | 判別できない読み仮名があります: {text} |
@@ -40,7 +42,7 @@ export interface ParseKanaBadRequest {
      */
     errorName: string;
     /**
-     * 
+     * エラーを起こした箇所
      * @type {{ [key: string]: string; }}
      * @memberof ParseKanaBadRequest
      */

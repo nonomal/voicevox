@@ -2,14 +2,22 @@ name: Test
 
 on:
   push:
+    branches:
+      - main
   pull_request:
     branches:
       - "**"
   workflow_dispatch:
+    inputs:
+      update_snapshots:
+        description: "スナップショットを更新する"
+        required: false
+        type: boolean
+        default: false
 
 env:
   VOICEVOX_ENGINE_REPO: "VOICEVOX/voicevox_nemo_engine" # 軽いのでNemoを使う
-  VOICEVOX_ENGINE_VERSION: "0.14.0"
+  VOICEVOX_ENGINE_VERSION: "0.24.0"
 
 defaults:
   run:
@@ -21,42 +29,35 @@ jobs:
     outputs:
       shouldUpdateSnapshots: ${{ steps.check-whether-to-update-snapshots.outputs.shouldUpdateSnapshots }}
     steps:
-      - name: Check if commit message includes [update snapshots]
+      - name: Check whether to update snapshots
         id: check-whether-to-update-snapshots
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const commits = ${{ toJson(github.event.commits) }};
-            if (!commits) {
-              // pull_request などでコミットがない場合はスキップ
-              core.setOutput("shouldUpdateSnapshots", false);
-              process.exit(0);
-            }
-            const shouldUpdateSnapshots = commits.some((commit) =>
-              commit.message.toLowerCase().includes("[update snapshots]")
-            );
-            core.setOutput("shouldUpdateSnapshots", shouldUpdateSnapshots);
-            console.log(`shouldUpdateSnapshots: ${shouldUpdateSnapshots}`);
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "shouldUpdateSnapshots=${{ inputs.update_snapshots }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "shouldUpdateSnapshots=false" >> "$GITHUB_OUTPUT"
+          fi
 
   # ビルドのテスト
   build-test:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Setup environment
         uses: ./.github/actions/setup-environment
-      - run: npm run electron:build_pnever
+      - run: pnpm run electron:build
 
   # unit テスト
   unit-test:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Setup environment
         uses: ./.github/actions/setup-environment
 
-      - run: npm run test:unit
+      - name: Run test
+        run: |
+          pnpm run test:unit
 
   # e2e テスト
   e2e-test:
@@ -65,16 +66,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
         include:
           - os: ubuntu-latest
-            voicevox_engine_asset_name: linux-cpu
+            voicevox_engine_asset_name: linux-cpu-x64
           - os: macos-latest
-            voicevox_engine_asset_name: macos-x64
+            voicevox_engine_asset_name: macos-arm64
           - os: windows-latest
             voicevox_engine_asset_name: windows-cpu
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Setup environment
         uses: ./.github/actions/setup-environment
 
@@ -83,7 +83,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb x11-xserver-utils # for electron
-          sudo apt-get install -y libsndfile1 # for engine
 
       - name: Download VOICEVOX ENGINE
         id: download-engine
@@ -94,24 +93,7 @@ jobs:
           dest: ${{ github.workspace }}/voicevox_engine
           target: ${{ matrix.voicevox_engine_asset_name }}
 
-      - name: Setup
-        run: |
-          # playwright
-          npx playwright install
-
-          # run.exe
-          chmod +x ${{ steps.download-engine.outputs.run_path }}
-
-          # .env
-          sed -i -e 's|"074fc39e-678b-4c13-8916-ffca8d505d1d"|"208cf94d-43d2-4cf5-abc0-9783cac36d29"|' .env.test
-          sed -i -e 's|"../voicevox_engine/run.exe"|"${{ steps.download-engine.outputs.run_path }}"|' .env.test
-          # GitHub Actions 環境だとたまに50021が封じられていることがあるので、ランダムなポートを使うようにする
-          PORT=$(node -r net -e "server=net.createServer();server.listen(0,()=>{console.log(server.address().port);server.close()})")
-          sed -i -e 's|"host": "http://127.0.0.1:50021"|"host": "http://127.0.0.1:'$PORT'"|' .env.test
-          sed -i -e 's|"executionArgs": \[\],|"executionArgs": ["--port='$PORT'"],|' .env.test
-          cp .env.test .env
-
-      - name: Run npm run test:browser-e2e
+      - name: Run pnpm run test:browser-e2e
         run: |
           if [ -n "${{ runner.debug }}" ]; then
             export DEBUG="pw:browser*"
@@ -120,22 +102,43 @@ jobs:
           if [[ ${{ needs.config.outputs.shouldUpdateSnapshots }} == 'true' ]]; then
             ARGS="--update-snapshots"
           fi
-          npm run test:browser-e2e -- $ARGS
+          pnpm run test:browser-e2e $ARGS
 
-      - name: Run npm run test:electron-e2e
+      - name: Run pnpm run test:electron-e2e
+        run: |
+          # .env
+          cp tests/env/.env.test-electron .env
+          sed -i -e 's|"path/to/engine"|"${{ steps.download-engine.outputs.run_path }}"|' .env
+          # GitHub Actions 環境だとたまに50021が封じられていることがあるので、ランダムなポートを使うようにする
+          PORT=$(node -r net -e "server=net.createServer();server.listen(0,()=>{console.log(server.address().port);server.close()})")
+          sed -i -e "s|random_port|$PORT|" .env
+          cat .env # ログ用
+
+          if [ -n "${{ runner.debug }}" ]; then
+            export DEBUG="pw:browser*"
+          fi
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            xvfb-run --auto-servernum pnpm run test:electron-e2e
+          else
+            pnpm run test:electron-e2e
+          fi
+
+          rm .env
+
+      - name: Run pnpm run test:storybook-vrt
         run: |
           if [ -n "${{ runner.debug }}" ]; then
             export DEBUG="pw:browser*"
           fi
-          if [[ ${{ matrix.os }} == ubuntu-* ]]; then
-            xvfb-run --auto-servernum npm run test:electron-e2e
-          else
-            npm run test:electron-e2e
+          ARGS=""
+          if [[ ${{ needs.config.outputs.shouldUpdateSnapshots }} == 'true' ]]; then
+            ARGS="--update-snapshots"
           fi
+          pnpm run test:storybook-vrt $ARGS
 
       - name: Upload playwright report to artifact
         if: failure()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: playwright-report-${{ matrix.os }}
           path: playwright-report
@@ -143,13 +146,16 @@ jobs:
       - name: Collect patch for snapshots
         if: needs.config.outputs.shouldUpdateSnapshots == 'true'
         run: |
-          git add --intent-to-add tests/  # git diff に表示されるようにする
-          git diff tests/  # ロギング用
-          git diff --binary tests/ > patch-${{ matrix.os }}.diff
+          # ログ用
+          git status
+
+          # git diff に表示されるようにする
+          git add --intent-to-add --all tests/
+          git diff --binary HEAD tests/ > patch-${{ matrix.os }}.diff
 
       - name: Upload patch to artifact
         if: needs.config.outputs.shouldUpdateSnapshots == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: updated-snapshots-${{ matrix.os }}
           path: patch-${{ matrix.os }}.diff
@@ -161,21 +167,27 @@ jobs:
     needs: [config, e2e-test]
     if: needs.config.outputs.shouldUpdateSnapshots == 'true'
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # NOTE: デフォルトの設定だとgithub-push-actionが動いてくれないので設定を変えている。
+          # ref: https://github.com/ad-m/github-push-action/issues/44#issuecomment-581706892
+          persist-credentials: false
+          fetch-depth: 0
 
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: updated-snapshots-*
-          path: patches
+          path: ${{ runner.temp }}/patches
           merge-multiple: true
 
       - name: Commit updated snapshots
+        id: commit-updated-snapshots
         run: |
           # パッチを適用
-          for patch in patches/*.diff; do
-            git apply --allow-empty $patch
-            rm $patch
+          for patch in ${{ runner.temp }}/patches/*.diff; do
+            git apply --allow-empty "$patch"
+            rm "$patch"
           done
 
           # 変更があるかチェック
@@ -184,21 +196,55 @@ jobs:
             git config --global user.email "github-actions[bot]@users.noreply.github.com"
             git add tests/
             git commit -m "（スナップショットを更新）"
-            git push
+
+            echo "changes_exist=true" >> "$GITHUB_OUTPUT"
           else
             echo "No changes to commit"
+
+            echo "changes_exist=false" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Push changes
+        if: steps.commit-updated-snapshots.outputs.changes_exist == 'true'
+        uses: ad-m/github-push-action@881a6320fdb16eb5318c5054f31c218aec2b324c # v1.3.0
+        with:
+          github_token: ${{ secrets.PUSH_TOKEN || secrets.GITHUB_TOKEN }}
+          branch: ${{ github.ref }}
+
+      - name: Show warning if token is not set
+        if: steps.commit-updated-snapshots.outputs.changes_exist == 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const pushTokenProvided = `${{ secrets.PUSH_TOKEN }}` !== "";
+            if (!pushTokenProvided) {
+              core.warning(
+                "スクリーンショットを更新したので、空コミットをプッシュしてテストを再実行してください。\n" +
+                "PUSH_TOKENをSecretsに追加すると次からこの操作を省けます。\n" +
+                "Secretsの設定方法はREADME.mdを参照してください。"
+              );
+            }
+            console.log(`pushTokenProvided: ${pushTokenProvided}`);
 
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Setup environment
         uses: ./.github/actions/setup-environment
 
       - name: Disallowed licenses check
-        run: npm run license:generate -- -o voicevox_licenses.json
+        run: pnpm run license:generate -o voicevox_licenses.json
 
-      - run: npm run typecheck
-      - run: npm run lint
-      - run: npm run markdownlint
+      - run: pnpm run typecheck
+      - run: pnpm run lint
+      - run: pnpm run markdownlint
+      - run: pnpm run typos
+      # ubuntu-latestにはShellCheckが入っているので、run:のシェルスクリプトも検査される
+      - run: pnpm run jactionlint
+
+      - name: Check pinact
+        uses: suzuki-shunsuke/pinact-action@896d595f299e71d65b9d28349d6956abe144390a # v3.0.0
+        with:
+          fix: false
+          min_age: "7"

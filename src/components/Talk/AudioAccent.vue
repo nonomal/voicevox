@@ -13,14 +13,18 @@
           snap
           dense
           color="primary"
-          track-size="2px"
+          trackSize="2px"
           :min="previewAccentSlider.qSliderProps.min.value"
           :max="previewAccentSlider.qSliderProps.max.value"
           :step="previewAccentSlider.qSliderProps.step.value"
           :disable="previewAccentSlider.qSliderProps.disable.value"
-          :model-value="previewAccentSlider.qSliderProps.modelValue.value"
-          @update:model-value="
-            previewAccentSlider.qSliderProps['onUpdate:modelValue']
+          :modelValue="previewAccentSlider.qSliderProps.modelValue.value"
+          @update:modelValue="
+            (value) => {
+              previewAccentSlider.qSliderProps['onUpdate:modelValue'](
+                ensureNotNullish(value),
+              );
+            }
           "
           @click.stop="stopPropagation"
           @change="previewAccentSlider.qSliderProps.onChange"
@@ -62,7 +66,8 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { previewSliderHelper } from "@/helpers/previewSliderHelper";
-import { AccentPhrase } from "@/openapi";
+import type { AccentPhrase } from "@/openapi";
+import { ensureNotNullish } from "@/type/utility";
 
 const props = withDefaults(
   defineProps<{

@@ -9,7 +9,7 @@
       "
       class="value-label"
       color="primary"
-      text-color="display-on-primary"
+      textColor="display-on-primary"
     >
       {{
         previewSlider.state.currentValue.value != undefined
@@ -19,10 +19,10 @@
     </QBadge>
     <!-- NOTE: QTooltipをQSlider内にしたいがquasarが未対応っぽいので兄弟に -->
     <QTooltip
-      v-if="previewSlider.qSliderProps.disable.value"
+      v-if="disable"
       :delay="500"
-      transition-show="jump-up"
-      transition-hide="jump-down"
+      transitionShow="jump-up"
+      transitionHide="jump-down"
       anchor="top middle"
       self="center middle"
       >無声化した音にイントネーションは存在しません。<br />テキストをクリックすることで無声化を解けます。</QTooltip
@@ -32,14 +32,20 @@
       reverse
       snap
       color="primary"
-      track-size="2.5px"
+      trackSize="2.5px"
       :style="clipPathComputed"
       :min="previewSlider.qSliderProps.min.value"
       :max="previewSlider.qSliderProps.max.value"
       :step="previewSlider.qSliderProps.step.value"
       :disable="previewSlider.qSliderProps.disable.value"
-      :model-value="previewSlider.qSliderProps.modelValue.value"
-      @update:model-value="previewSlider.qSliderProps['onUpdate:modelValue']"
+      :modelValue="previewSlider.qSliderProps.modelValue.value"
+      @update:modelValue="
+        (value) => {
+          previewSlider.qSliderProps['onUpdate:modelValue'](
+            ensureNotNullish(value),
+          );
+        }
+      "
       @click.stop="stopPropagation"
       @change="previewSlider.qSliderProps.onChange"
       @wheel="previewSlider.qSliderProps.onWheel"
@@ -51,7 +57,8 @@
 <script setup lang="ts">
 import { computed, reactive } from "vue";
 import { previewSliderHelper } from "@/helpers/previewSliderHelper";
-import { MoraDataType } from "@/type/preload";
+import type { MoraDataType } from "@/type/preload";
+import { ensureNotNullish } from "@/type/utility";
 
 const props = withDefaults(
   defineProps<{

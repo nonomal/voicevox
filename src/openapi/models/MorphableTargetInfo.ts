@@ -1,8 +1,8 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * VOICEVOX Engine
- * VOICEVOXの音声合成エンジンです。
+ * VOICEVOX ENGINE OSS
+ * VOICEVOX OSS の音声合成エンジンです。
  *
  * The version of the OpenAPI document: latest
  * 
@@ -14,13 +14,13 @@
 
 import { exists, mapValues } from '../runtime';
 /**
- * 
+ * モーフィング相手としての情報。
  * @export
  * @interface MorphableTargetInfo
  */
 export interface MorphableTargetInfo {
     /**
-     * 
+     * 指定したキャラクターに対してモーフィングの可否
      * @type {boolean}
      * @memberof MorphableTargetInfo
      */

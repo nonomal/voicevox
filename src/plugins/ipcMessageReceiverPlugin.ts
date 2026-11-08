@@ -1,60 +1,50 @@
-import { Plugin } from "vue";
+import type { Plugin } from "vue";
 import { debounce } from "quasar";
-import { Store } from "@/store/vuex";
-import { AllActions, AllGetters, AllMutations, State } from "@/store/type";
+import type { Store } from "@/store/vuex";
+import type { AllActions, AllGetters, AllMutations, State } from "@/store/type";
 
 export const ipcMessageReceiver: Plugin = {
   install: (
     _,
     options: { store: Store<State, AllGetters, AllActions, AllMutations> },
   ) => {
-    window.backend.onReceivedIPCMsg(
-      "LOAD_PROJECT_FILE",
-      (_, { filePath, confirm } = {}) =>
-        options.store.dispatch("LOAD_PROJECT_FILE", { filePath, confirm }),
-    );
+    window.backend.registerIpcHandler({
+      loadProjectFile: ({ filePath }) =>
+        void options.store.actions.LOAD_PROJECT_FILE({
+          type: "path",
+          filePath,
+        }),
 
-    window.backend.onReceivedIPCMsg("DETECT_MAXIMIZED", () =>
-      options.store.dispatch("DETECT_MAXIMIZED"),
-    );
+      detectMaximized: () => options.store.actions.DETECT_MAXIMIZED(),
 
-    window.backend.onReceivedIPCMsg("DETECT_UNMAXIMIZED", () =>
-      options.store.dispatch("DETECT_UNMAXIMIZED"),
-    );
+      detectUnmaximized: () => options.store.actions.DETECT_UNMAXIMIZED(),
 
-    window.backend.onReceivedIPCMsg(
-      "DETECTED_ENGINE_ERROR",
-      (_, { engineId }) =>
-        options.store.dispatch("DETECTED_ENGINE_ERROR", { engineId }),
-    );
+      detectedEngineError: ({ engineId }) =>
+        options.store.actions.DETECTED_ENGINE_ERROR({ engineId }),
 
-    window.backend.onReceivedIPCMsg("DETECT_PINNED", () => {
-      options.store.dispatch("DETECT_PINNED");
-    });
+      detectPinned: () => {
+        void options.store.actions.DETECT_PINNED();
+      },
 
-    window.backend.onReceivedIPCMsg("DETECT_UNPINNED", () => {
-      options.store.dispatch("DETECT_UNPINNED");
-    });
+      detectUnpinned: () => {
+        void options.store.actions.DETECT_UNPINNED();
+      },
 
-    window.backend.onReceivedIPCMsg("DETECT_ENTER_FULLSCREEN", () =>
-      options.store.dispatch("DETECT_ENTER_FULLSCREEN"),
-    );
+      detectEnterFullscreen: () =>
+        options.store.actions.DETECT_ENTER_FULLSCREEN(),
 
-    window.backend.onReceivedIPCMsg("DETECT_LEAVE_FULLSCREEN", () =>
-      options.store.dispatch("DETECT_LEAVE_FULLSCREEN"),
-    );
+      detectLeaveFullscreen: () =>
+        options.store.actions.DETECT_LEAVE_FULLSCREEN(),
 
-    window.backend.onReceivedIPCMsg("CHECK_EDITED_AND_NOT_SAVE", (_, obj) => {
-      options.store.dispatch("CHECK_EDITED_AND_NOT_SAVE", obj);
-    });
+      checkEditedAndNotSave: (obj) => {
+        void options.store.actions.CHECK_EDITED_AND_NOT_SAVE(obj);
+      },
 
-    window.backend.onReceivedIPCMsg(
-      "DETECT_RESIZED",
-      debounce(
-        (_, { width, height }) =>
+      detectResized: debounce(
+        ({ width, height }: { width: number; height: number }) =>
           window.dataLayer?.push({ event: "windowResize", width, height }),
         300,
       ),
-    );
+    });
   },
 };

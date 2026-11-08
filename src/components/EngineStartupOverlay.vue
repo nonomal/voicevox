@@ -39,7 +39,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useStore } from "@/store";
-import { EngineState } from "@/store/type";
+import type { EngineState } from "@/store/type";
 
 const store = useStore();
 const props = defineProps<{
@@ -91,8 +91,8 @@ watch(allEngineState, (newEngineState) => {
 });
 
 const reloadAppWithMultiEngineOffMode = () => {
-  store.dispatch("CHECK_EDITED_AND_NOT_SAVE", {
-    closeOrReload: "reload",
+  void store.actions.CHECK_EDITED_AND_NOT_SAVE({
+    nextAction: "reload",
     isMultiEngineOffMode: true,
   });
 };

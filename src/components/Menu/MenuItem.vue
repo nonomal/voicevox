@@ -28,8 +28,8 @@
     <QMenu
       v-model="selectedComputed"
       anchor="top end"
-      transition-show="none"
-      transition-hide="none"
+      transitionShow="none"
+      transitionHide="none"
       :target="!uiLocked"
     >
       <MenuItem
@@ -72,9 +72,9 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
-import { MenuItemData } from "./type";
+import type { MenuItemData } from "./type";
 import { useStore } from "@/store";
-import { hotkeyActionNameSchema } from "@/type/preload";
+import { hotkeyActionNameSchema } from "@/domain/hotkeyAction";
 const props = withDefaults(
   defineProps<{
     selected?: boolean;

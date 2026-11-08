@@ -6,23 +6,23 @@
   <!-- FIXME: 画面サイズが小さくなると表示が崩れるのを直す -->
   <!-- NOTE: デザインしづらいからQBtnかdivの方が良い -->
   <QBtnToggle
-    :model-value="openedEditor"
+    :modelValue="openedEditor"
     unelevated
     :disable="uiLocked"
     dense
-    toggle-color="primary"
+    toggleColor="primary"
     :options="[
       { label: 'トーク', value: 'talk' },
       { label: 'ソング', value: 'song' },
     ]"
-    @update:model-value="switchEditor"
+    @update:modelValue="switchEditor"
   />
 </template>
 
 <script setup lang="ts">
 import { computed } from "vue";
 import { useStore } from "@/store";
-import { EditorType } from "@/type/preload";
+import type { EditorType } from "@/type/preload";
 
 const store = useStore();
 
@@ -30,7 +30,10 @@ const openedEditor = computed(() => store.state.openedEditor);
 const uiLocked = computed(() => store.getters.UI_LOCKED);
 
 const switchEditor = async (editor: EditorType) => {
-  await store.dispatch("SET_OPENED_EDITOR", { editor });
+  await store.actions.SET_ROOT_MISC_SETTING({
+    key: "openedEditor",
+    value: editor,
+  });
 };
 </script>
 

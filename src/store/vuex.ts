@@ -1,16 +1,16 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // FIXME: anyを使わないようにする
-import { InjectionKey } from "vue";
+import type { InjectionKey } from "vue";
 import {
   Store as BaseStore,
-  createStore as baseCreateStore,
   useStore as baseUseStore,
-  ModuleTree,
-  Plugin,
-  StoreOptions as OriginalStoreOptions,
-  GetterTree as OriginalGetterTree,
-  ActionTree as OriginalActionTree,
-  MutationTree as OriginalMutationTree,
+  type ModuleTree,
+  type StoreOptions as OriginalStoreOptions,
+  type GetterTree as OriginalGetterTree,
+  type ActionTree as OriginalActionTree,
+  type MutationTree as OriginalMutationTree,
+  type Dispatch as DefaultDispatch,
+  type Commit as DefaultCommit,
 } from "vuex";
 import type {
   AllActions,
@@ -34,20 +34,52 @@ export class Store<
   A extends ActionsBase,
   M extends MutationsBase,
 > extends BaseStore<S> {
-  constructor(options: OriginalStoreOptions<S>) {
-    super(options);
+  constructor(options: StoreOptions<S, G, A, M>) {
+    // Vuexはデフォルトでpluginsをコンストラクタ内（resetStoreState直後）で呼ぶが、
+    // その時点ではVV独自のactionsとmutationsがまだ設定されていない。
+    // そのため、pluginsをoptionsから除いてVuexに渡し、
+    // actions/mutations設定後に手動で呼ぶ形にしている。
+    // なお、Vuexはメンテナンスモードであり今後この動作が変わることはないと考えられる。
+    const { plugins, ...restOptions } = options;
+    super(restOptions as OriginalStoreOptions<S>);
+    // eslint-disable-next-line @typescript-eslint/no-deprecated
+    this.actions = dotNotationDispatchProxy(this.dispatch.bind(this));
+    // eslint-disable-next-line @typescript-eslint/no-deprecated
+    this.mutations = dotNotationCommitProxy(this.commit.bind(this));
+    plugins?.forEach((plugin) => plugin(this));
   }
 
-  readonly getters!: G;
+  declare readonly getters: G;
 
-  // 既に型がつけられているものを上書きすることになるので、TS2564を吐く、それの回避
+  /**
+   * @deprecated 本メソッドは非推奨です。代わりにactionsを使ってください。
+   *
+   * VOICEVOXでは独自の型定義ラッパーを用いてvuexを利用しており、
+   * 型定義ラッパーを用いた呼び出しが推奨されます。
+   * 詳しくは以下のissueを参照ください。
+   * 関連issue: https://github.com/VOICEVOX/voicevox/issues/2088
+   */
+  declare dispatch: DefaultDispatch;
+  /**
+   * @deprecated 本メソッドは非推奨です。代わりにmutationsを使ってください。
+   *
+   * VOICEVOXでは独自の型定義ラッパーを用いてvuexを利用しており、
+   * 型定義ラッパーを用いた呼び出しが推奨されます。
+   * 詳しくは以下のissueを参照ください。
+   * 関連issue: https://github.com/VOICEVOX/voicevox/issues/2088
+   */
+  declare commit: DefaultCommit;
 
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
-  dispatch: Dispatch<A>;
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
-  commit: Commit<M>;
+  /**
+   * ドット記法用のActionを直接呼べる。エラーになる場合はdispatchを使う。
+   * 詳細 https://github.com/VOICEVOX/voicevox/issues/2088
+   */
+  actions: DotNotationDispatch<A>;
+  /**
+   * ドット記法用のMutationを直接呼べる。エラーになる場合はcommitを使う。
+   * 詳細 https://github.com/VOICEVOX/voicevox/issues/2088
+   */
+  mutations: DotNotationCommit<M>;
 }
 
 export function createStore<
@@ -56,13 +88,7 @@ export function createStore<
   A extends ActionsBase,
   M extends MutationsBase,
 >(options: StoreOptions<S, G, A, M>): Store<S, G, A, M> {
-  // optionsをOriginalStoreOptions<S>で型キャストしないとTS2589を吐く
-  return baseCreateStore<S>(options as OriginalStoreOptions<S>) as Store<
-    S,
-    G,
-    A,
-    M
-  >;
+  return new Store<S, G, A, M>(options);
 }
 
 export function useStore<
@@ -71,7 +97,8 @@ export function useStore<
   A extends ActionsBase,
   M extends MutationsBase,
 >(injectKey?: InjectionKey<Store<S, G, A, M>> | string): Store<S, G, A, M> {
-  return baseUseStore<S>(injectKey) as Store<S, G, A, M>;
+  // FIXME: dispatchとcommitの型を戻せばsuper typeになるのでunknownを消せる。
+  return baseUseStore<S>(injectKey) as unknown as Store<S, G, A, M>;
 }
 
 export interface Dispatch<A extends ActionsBase> {
@@ -85,7 +112,7 @@ export interface Dispatch<A extends ActionsBase> {
       any
     >
       ? Parameters<A[T]>[0]
-      : // eslint-disable-next-line @typescript-eslint/ban-types
+      : // eslint-disable-next-line @typescript-eslint/no-empty-object-type
         {}),
   ): Promise<PromiseType<ReturnType<A[T]>>>;
 }
@@ -98,10 +125,49 @@ export interface Commit<M extends MutationsBase> {
   <T extends keyof M>(
     payloadWithType: { type: T } & (M[T] extends Record<string, any>
       ? M[T]
-      : // eslint-disable-next-line @typescript-eslint/ban-types
+      : // eslint-disable-next-line @typescript-eslint/no-empty-object-type
         {}),
   ): void;
 }
+
+export type DotNotationDispatch<A extends ActionsBase> = {
+  [T in keyof A]: (
+    ...payload: Parameters<A[T]>
+  ) => Promise<PromiseType<ReturnType<A[T]>>>;
+};
+
+const dotNotationDispatchProxy = <A extends ActionsBase>(
+  dispatch: DefaultDispatch,
+): DotNotationDispatch<A> =>
+  new Proxy(
+    { dispatch },
+    {
+      get(target, tag: string) {
+        return (...payloads: Parameters<A[string]>) =>
+          target.dispatch(tag, ...payloads);
+      },
+    },
+  ) as DotNotationDispatch<A>;
+
+export type DotNotationCommit<M extends MutationsBase> = {
+  [T in keyof M]: (
+    ...payload: M[T] extends undefined ? void[] : [M[T]]
+  ) => void;
+};
+
+const dotNotationCommitProxy = <M extends MutationsBase>(
+  commit: DefaultCommit,
+): DotNotationCommit<M> =>
+  new Proxy(
+    { commit },
+    {
+      get(target, tag: string) {
+        return (...payloads: [M[string]]) => {
+          target.commit(tag, ...payloads);
+        };
+      },
+    },
+  ) as DotNotationCommit<M>;
 
 export interface StoreOptions<
   S,
@@ -117,20 +183,29 @@ export interface StoreOptions<
   actions: ActionTree<S, S, A, SG, SA, SM>;
   mutations: MutationTree<S, M>;
   modules?: ModuleTree<S>;
-  plugins?: Plugin<S>[];
+  plugins?: ((store: Store<S, SG, SA, SM>) => void)[];
   strict?: boolean;
   devtools?: boolean;
 }
-
-export interface ActionContext<
-  S,
-  R,
-  SG extends GettersBase,
-  SA extends ActionsBase,
-  SM extends MutationsBase,
-> {
-  dispatch: Dispatch<SA>;
-  commit: Commit<SM>;
+export interface ActionContext<S, R, SG extends GettersBase> {
+  /**
+   * @deprecated 本メソッドは非推奨です。代わりにactionsを使ってください。
+   *
+   * VOICEVOXでは独自の型定義ラッパーを用いてvuexを利用しており、
+   * 型定義ラッパーを用いた呼び出しが推奨されます。
+   * 詳しくは以下のissueを参照ください。
+   * 関連issue: https://github.com/VOICEVOX/voicevox/issues/2088
+   */
+  dispatch: DefaultDispatch;
+  /**
+   * @deprecated 本メソッドは非推奨です。代わりにmutationsを使ってください。
+   *
+   * VOICEVOXでは独自の型定義ラッパーを用いてvuexを利用しており、
+   * 型定義ラッパーを用いた呼び出しが推奨されます。
+   * 詳しくは以下のissueを参照ください。
+   * 関連issue: https://github.com/VOICEVOX/voicevox/issues/2088
+   */
+  commit: DefaultCommit;
   state: S;
   getters: SG;
   rootState: R;
@@ -146,7 +221,7 @@ export type ActionHandler<
   K extends keyof SA,
 > = (
   this: Store<S, SG, SA, SM>,
-  injectee: ActionContext<S, R, SG, SA, SM>,
+  injectee: ActionContext<S, R, SG>,
   payload: Parameters<SA[K]>[0],
 ) => ReturnType<SA[K]>;
 export interface ActionObject<
@@ -159,6 +234,49 @@ export interface ActionObject<
 > {
   root?: boolean;
   handler: ActionHandler<S, R, SG, SA, SM, K>;
+}
+
+export type DotNotationActionContext<
+  S,
+  R,
+  SG extends GettersBase,
+  SA extends ActionsBase,
+  SM extends MutationsBase,
+> = {
+  /**
+   * ドット記法用のActionを直接呼べる。エラーになる場合はdispatchを使う。
+   * 詳細 https://github.com/VOICEVOX/voicevox/issues/2088
+   */
+  actions: DotNotationDispatch<SA>;
+  /**
+   * ドット記法用のMutationを直接呼べる。エラーになる場合はcommitを使う。
+   * 詳細 https://github.com/VOICEVOX/voicevox/issues/2088
+   */
+  mutations: DotNotationCommit<SM>;
+} & ActionContext<S, R, SG>;
+
+export type DotNotationActionHandler<
+  S,
+  R,
+  SG extends GettersBase,
+  SA extends ActionsBase,
+  SM extends MutationsBase,
+  K extends keyof SA,
+> = (
+  this: Store<S, SG, SA, SM>,
+  injectee: DotNotationActionContext<S, R, SG, SA, SM>,
+  payload: Parameters<SA[K]>[0],
+) => ReturnType<SA[K]>;
+export interface DotNotationActionObject<
+  S,
+  R,
+  SG extends GettersBase,
+  SA extends ActionsBase,
+  SM extends MutationsBase,
+  K extends keyof SA,
+> {
+  root?: boolean;
+  handler: DotNotationActionHandler<S, R, SG, SA, SM, K>;
 }
 
 export type Getter<S, R, G, K extends keyof G, SG extends GettersBase> = (
@@ -185,6 +303,66 @@ export type Mutation<S, M extends MutationsBase, K extends keyof M> = (
   state: S,
   payload: M[K],
 ) => void;
+
+export type DotNotationAction<
+  S,
+  R,
+  A extends ActionsBase,
+  K extends keyof A,
+  SG extends GettersBase,
+  SA extends ActionsBase,
+  SM extends MutationsBase,
+> =
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
+  | DotNotationActionHandler<S, R, SG, SA, SM, K>
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
+  | DotNotationActionObject<S, R, SG, SA, SM, K>;
+
+// ドット記法のActionを通常のActionに変換する関数
+const unwrapDotNotationAction = <
+  S,
+  R,
+  A extends ActionsBase,
+  K extends keyof A,
+  SG extends GettersBase,
+  SA extends ActionsBase,
+  SM extends MutationsBase,
+>(
+  dotNotationAction: DotNotationAction<S, R, A, K, SG, SA, SM>,
+): Action<S, R, A, K, SG, SA, SM> => {
+  const wrappedHandler =
+    typeof dotNotationAction === "function"
+      ? dotNotationAction
+      : dotNotationAction.handler;
+
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
+  const handler: ActionHandler<S, R, SG, SA, SM, K> = function (
+    injectee,
+    payload,
+  ) {
+    const dotNotationInjectee = {
+      ...injectee,
+      // eslint-disable-next-line @typescript-eslint/no-deprecated
+      actions: dotNotationDispatchProxy<SA>(injectee.dispatch),
+      // eslint-disable-next-line @typescript-eslint/no-deprecated
+      mutations: dotNotationCommitProxy<SM>(injectee.commit),
+    };
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+    return wrappedHandler.call(this, dotNotationInjectee, payload);
+  };
+
+  if (typeof dotNotationAction === "function") {
+    return handler;
+  } else {
+    return {
+      ...dotNotationAction,
+      handler,
+    };
+  }
+};
 
 export type GetterTree<
   S,
@@ -236,13 +414,18 @@ export type CustomMutationTree<S, M extends MutationsBase> = {
   [K in keyof M]: Mutation<S, M, K>;
 };
 
-type StoreTypesBase = {
-  [key: string]: {
+export type StorePlugins = ((
+  store: Store<State, AllGetters, AllActions, AllMutations>,
+) => void)[];
+
+type StoreTypesBase = Record<
+  string,
+  {
     getter?: GettersBase[number];
     mutation?: MutationsBase[number];
     action?: ActionsBase[number];
-  };
-};
+  }
+>;
 
 type PartialStoreOptions<
   S,
@@ -258,7 +441,7 @@ type PartialStoreOptions<
         : never
       : GAM extends "action"
         ? K extends keyof A
-          ? Action<S, S, A, K, AllGetters, AllActions, AllMutations>
+          ? DotNotationAction<S, S, A, K, AllGetters, AllActions, AllMutations>
           : never
         : GAM extends "mutation"
           ? K extends keyof M
@@ -281,20 +464,26 @@ export const createPartialStore = <
       const option = options[cur];
 
       if (option.getter) {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
         acc.getters[cur] = option.getter;
       }
       if (option.mutation) {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
         acc.mutations[cur] = option.mutation;
       }
       if (option.action) {
-        acc.actions[cur] = option.action;
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        acc.actions[cur] = unwrapDotNotationAction(option.action);
       }
 
       return acc;
     },
     {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       getters: Object.create(null),
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       mutations: Object.create(null),
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       actions: Object.create(null),
     },
   );

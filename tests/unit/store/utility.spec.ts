@@ -1,12 +1,12 @@
-import { v4 as uuidv4 } from "uuid";
-import { AccentPhrase, Mora } from "@/openapi";
+import { afterEach, beforeEach, it, expect, describe, test, vi } from "vitest";
+import type { AccentPhrase, Mora } from "@/openapi";
 import {
-  CharacterInfo,
+  type CharacterInfo,
   EngineId,
   SpeakerId,
   StyleId,
-  ToolbarButtonTagType,
-  isMac,
+  type StyleType,
+  type ToolbarButtonTagType,
 } from "@/type/preload";
 import {
   formatCharacterStyleName,
@@ -19,13 +19,57 @@ import {
   isAccentPhrasesTextDifferent,
   buildAudioFileNameFromRawData,
   getToolbarButtonName,
-  createKanaRegex,
-  convertHiraToKana,
-  convertLongVowel,
-  getBaseName,
   isOnCommandOrCtrlKeyDown,
+  findInitialSingingTeacher,
   filterCharacterInfosByStyleType,
+  generateUniqueFilePath,
 } from "@/store/utility";
+import { uuid4 } from "@/helpers/random";
+import { isMac } from "@/helpers/platform";
+
+describe("generateUniqueFilePath", () => {
+  const checkFileExists = vi.fn<(filePath: string) => Promise<boolean>>();
+
+  beforeEach(() => {
+    checkFileExists.mockReset();
+    vi.stubGlobal("window", { backend: { checkFileExists } });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  test("ファイルが存在しない場合は元のパスを返す", async () => {
+    checkFileExists.mockResolvedValue(false);
+
+    await expect(generateUniqueFilePath("audio.wav")).resolves.toBe(
+      "audio.wav",
+    );
+    expect(checkFileExists).toHaveBeenCalledWith("audio.wav");
+  });
+
+  test("ファイルが存在する場合は連番を付ける", async () => {
+    checkFileExists
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+
+    await expect(generateUniqueFilePath("audio.wav")).resolves.toBe(
+      "audio[2].wav",
+    );
+    expect(checkFileExists.mock.calls).toEqual([
+      ["audio.wav"],
+      ["audio[1].wav"],
+      ["audio[2].wav"],
+    ]);
+  });
+
+  test("拡張子がない場合も連番を付ける", async () => {
+    checkFileExists.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+
+    await expect(generateUniqueFilePath("audio")).resolves.toBe("audio[1]");
+  });
+});
 
 function createDummyMora(text: string): Mora {
   return {
@@ -255,18 +299,60 @@ describe("isAccentPhrasesTextDifferent", () => {
 
 test("buildAudioFileNameFromRawData", () => {
   const fileNamePattern =
-    "index=$連番$ characterName=$キャラ$ text=$テキスト$ styleName=$スタイル$ date=$日付$";
+    "index=$連番$ characterName=$キャラ$ text=$テキスト$ styleName=$スタイル$ date=$日付$ projectName=$プロジェクト名$";
   const vars = {
     index: 10,
     characterName: "キャラ１",
     text: "テストテキスト",
     styleName: "スタイル１",
     date: "20210801",
+    projectName: "サンプルプロジェクト",
   };
   const result = buildAudioFileNameFromRawData(fileNamePattern, vars);
   expect(result).toBe(
-    "index=011 characterName=キャラ１ text=テストテキスト styleName=スタイル１ date=20210801",
+    "index=011 characterName=キャラ１ text=テストテキスト styleName=スタイル１ date=20210801 projectName=サンプルプロジェクト",
   );
+});
+
+describe("buildAudioFileNameFromRawData の文字数指定", () => {
+  const vars = {
+    index: 0,
+    characterName: "キャラ１",
+    text: "今日の天気は晴れのち曇りです",
+    styleName: "スタイル１",
+    date: "20210801",
+    projectName: "サンプルプロジェクト",
+  };
+
+  it("文字数指定がなければテキストを10文字に切り詰める", () => {
+    expect(buildAudioFileNameFromRawData("$連番$_$テキスト$", vars)).toBe(
+      "001_今日の天気は晴れの…",
+    );
+  });
+
+  it("文字数指定があればその文字数で切り詰める", () => {
+    expect(buildAudioFileNameFromRawData("$連番$_$テキスト[20]$", vars)).toBe(
+      "001_今日の天気は晴れのち曇りです",
+    );
+    expect(buildAudioFileNameFromRawData("$連番$_$テキスト[5]$", vars)).toBe(
+      "001_今日の天…",
+    );
+  });
+
+  it("切り詰めないタグにも文字数を指定できる", () => {
+    expect(
+      buildAudioFileNameFromRawData("$連番$_$プロジェクト名[4]$", vars),
+    ).toBe("001_サンプ…");
+  });
+
+  it("不正な文字数指定は置換しない", () => {
+    expect(buildAudioFileNameFromRawData("$連番$_$テキスト[0]$", vars)).toBe(
+      "001_$テキスト[0]$",
+    );
+    expect(buildAudioFileNameFromRawData("$連番$_$テキスト[100]$", vars)).toBe(
+      "001_$テキスト[100]$",
+    );
+  });
 });
 
 test("getToolbarButtonName", () => {
@@ -284,38 +370,6 @@ test("getToolbarButtonName", () => {
   );
 });
 
-describe("createKanaRegex", () => {
-  it("includeSeparationがtrueの場合、読点とクエスチョンも含む", () => {
-    const regex = createKanaRegex(true);
-    expect(regex.test("あいうえお、")).toBe(true);
-    expect(regex.test("かきくけこ？")).toBe(true);
-  });
-
-  it("includeSeparationがfalseの場合、読点とクエスチョンを含まない", () => {
-    const regex = createKanaRegex(false);
-    expect(regex.test("あいうえお、")).toBe(false);
-    expect(regex.test("かきくけこ？")).toBe(false);
-  });
-});
-
-test("convertHiraToKana", () => {
-  expect(convertHiraToKana("あいうえお")).toBe("アイウエオ");
-  expect(convertHiraToKana("がぱをんー")).toBe("ガパヲンー");
-});
-
-test("convertLongVowel", () => {
-  expect(convertLongVowel("アー")).toBe("アア");
-  expect(convertLongVowel("ガー")).toBe("ガア");
-  expect(convertLongVowel("ンー")).toBe("ンン");
-});
-
-test("getBaseName", () => {
-  expect(getBaseName("/path/to/file.txt")).toBe("file.txt");
-  expect(getBaseName("/path/to/file")).toBe("file");
-  expect(getBaseName("file.txt")).toBe("file.txt");
-  expect(getBaseName("file")).toBe("file");
-});
-
 test("isOnCommandOrCtrlKeyDown", () => {
   expect(isOnCommandOrCtrlKeyDown({ metaKey: true, ctrlKey: false })).toBe(
     isMac,
@@ -331,15 +385,17 @@ test("isOnCommandOrCtrlKeyDown", () => {
 
 describe("filterCharacterInfosByStyleType", () => {
   const createCharacterInfo = (
-    styleTypes: (undefined | "talk" | "frame_decode" | "sing")[],
+    styleTypes: (
+      undefined | "talk" | "frame_decode" | "singing_teacher" | "sing"
+    )[],
   ): CharacterInfo => {
-    const engineId = EngineId(uuidv4());
+    const engineId = EngineId(uuid4());
     return {
       portraitPath: "path/to/portrait",
       metas: {
         policy: "policy",
         speakerName: "speakerName",
-        speakerUuid: SpeakerId(uuidv4()),
+        speakerUuid: SpeakerId(uuid4()),
         styles: styleTypes.map((styleType) => ({
           styleType,
           styleName: "styleName",
@@ -355,12 +411,17 @@ describe("filterCharacterInfosByStyleType", () => {
   const characterInfos: CharacterInfo[] = [
     createCharacterInfo(["talk"]),
     createCharacterInfo(["frame_decode"]),
+    createCharacterInfo(["singing_teacher"]),
     createCharacterInfo(["sing"]),
-    createCharacterInfo(["talk", "frame_decode", "sing"]),
+    createCharacterInfo(["talk", "frame_decode", "singing_teacher", "sing"]),
     createCharacterInfo([undefined]),
   ];
 
-  for (const styleType of ["frame_decode", "sing"] as const) {
+  for (const styleType of [
+    "frame_decode",
+    "singing_teacher",
+    "sing",
+  ] as const) {
     test(`${styleType}のキャラクターが取得できる`, () => {
       const filtered = filterCharacterInfosByStyleType(
         characterInfos,
@@ -386,6 +447,11 @@ describe("filterCharacterInfosByStyleType", () => {
     expect(filtered[0].metas.styles.length).toBe(1);
     expect(filtered[1].metas.styles.length).toBe(1);
     expect(filtered[2].metas.styles.length).toBe(2);
+    expect(
+      filtered.flatMap((characterInfo) => characterInfo.metas.styles),
+    ).not.toContainEqual(
+      expect.objectContaining({ styleType: "singing_teacher" }),
+    );
   });
 
   test(`talkを指定するとsingerLike以外のキャラクターが取得できる`, () => {
@@ -394,5 +460,90 @@ describe("filterCharacterInfosByStyleType", () => {
     expect(filtered[0].metas.styles.length).toBe(1);
     expect(filtered[1].metas.styles.length).toBe(1);
     expect(filtered[2].metas.styles.length).toBe(1);
+  });
+});
+
+describe("findInitialSingingTeacher", () => {
+  const createCharacterInfo = (
+    engineId: EngineId,
+    speakerUuid: string,
+    styles: { styleId: number; styleType: StyleType }[],
+  ): CharacterInfo => ({
+    portraitPath: "path/to/portrait",
+    metas: {
+      policy: "policy",
+      speakerName: "speakerName",
+      speakerUuid: SpeakerId(speakerUuid),
+      styles: styles.map(({ styleId, styleType }) => ({
+        styleType,
+        styleName: "styleName",
+        engineId,
+        styleId: StyleId(styleId),
+        iconPath: "path/to/icon",
+        portraitPath: "path/to/portrait",
+        voiceSamplePaths: [],
+      })),
+    },
+  });
+
+  const engineIdA = EngineId("00000000-0000-0000-0000-000000000001");
+  test("選択した歌手のスタイルが歌い方に使える場合はそのスタイルを選ぶ", () => {
+    const singer = { engineId: engineIdA, styleId: StyleId(1) };
+    const characterInfos = [
+      createCharacterInfo(engineIdA, uuid4(), [
+        { styleId: 2, styleType: "singing_teacher" },
+        { styleId: 1, styleType: "sing" },
+      ]),
+    ];
+
+    expect(findInitialSingingTeacher(singer.styleId, characterInfos)).toEqual({
+      styleId: singer.styleId,
+    });
+  });
+
+  test("同じキャラクターの歌い方を他の候補より優先する", () => {
+    const singer = { engineId: engineIdA, styleId: StyleId(1) };
+    const characterInfos = [
+      createCharacterInfo(engineIdA, uuid4(), [
+        { styleId: 3, styleType: "singing_teacher" },
+      ]),
+      createCharacterInfo(engineIdA, uuid4(), [
+        { styleId: 1, styleType: "frame_decode" },
+        { styleId: 6000, styleType: "singing_teacher" },
+      ]),
+    ];
+
+    expect(findInitialSingingTeacher(singer.styleId, characterInfos)).toEqual({
+      styleId: StyleId(6000),
+    });
+  });
+
+  test("同じキャラクターに候補がなければ同じエンジンの別キャラクターから選ぶ", () => {
+    const singer = { engineId: engineIdA, styleId: StyleId(1) };
+    const characterInfos = [
+      createCharacterInfo(engineIdA, uuid4(), [
+        { styleId: 1, styleType: "frame_decode" },
+      ]),
+      createCharacterInfo(engineIdA, uuid4(), [
+        { styleId: 2, styleType: "singing_teacher" },
+      ]),
+    ];
+
+    expect(findInitialSingingTeacher(singer.styleId, characterInfos)).toEqual({
+      styleId: StyleId(2),
+    });
+  });
+
+  test("利用可能な歌い方がなければundefinedを返す", () => {
+    const singer = { engineId: engineIdA, styleId: StyleId(1) };
+    const characterInfos = [
+      createCharacterInfo(engineIdA, uuid4(), [
+        { styleId: 1, styleType: "frame_decode" },
+      ]),
+    ];
+
+    expect(
+      findInitialSingingTeacher(singer.styleId, characterInfos),
+    ).toBeUndefined();
   });
 });

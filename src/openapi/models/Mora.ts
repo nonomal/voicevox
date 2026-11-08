@@ -1,8 +1,8 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * VOICEVOX Engine
- * VOICEVOXの音声合成エンジンです。
+ * VOICEVOX ENGINE OSS
+ * VOICEVOX OSS の音声合成エンジンです。
  *
  * The version of the OpenAPI document: latest
  * 
@@ -14,43 +14,43 @@
 
 import { exists, mapValues } from '../runtime';
 /**
- * モーラ（子音＋母音）ごとの情報
+ * モーラ（子音＋母音）ごとの情報。
  * @export
  * @interface Mora
  */
 export interface Mora {
     /**
-     * 
+     * 文字
      * @type {string}
      * @memberof Mora
      */
     text: string;
     /**
-     * 
+     * 子音の音素
      * @type {string}
      * @memberof Mora
      */
     consonant?: string;
     /**
-     * 
+     * 子音の長さ
      * @type {number}
      * @memberof Mora
      */
     consonantLength?: number;
     /**
-     * 
+     * 母音の音素
      * @type {string}
      * @memberof Mora
      */
     vowel: string;
     /**
-     * 
+     * 母音の長さ
      * @type {number}
      * @memberof Mora
      */
     vowelLength: number;
     /**
-     * 
+     * 音高
      * @type {number}
      * @memberof Mora
      */

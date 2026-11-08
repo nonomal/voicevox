@@ -1,7 +1,11 @@
-import { InjectionKey } from "vue";
-import { createStore, Store, useStore as baseUseStore } from "./vuex";
-
+import type { InjectionKey } from "vue";
 import {
+  createStore,
+  type Store as BaseStore,
+  useStore as baseUseStore,
+} from "./vuex";
+
+import type {
   AllActions,
   AllGetters,
   AllMutations,
@@ -18,12 +22,14 @@ import {
   getCharacterInfo,
 } from "./audio";
 import { audioPlayerStoreState, audioPlayerStore } from "./audioPlayer";
+import { audioContextStorePlugins } from "./audioContext";
 import {
-  singingStoreState,
-  singingStore,
-  singingCommandStoreState,
-  singingCommandStore,
-} from "./singing";
+  songStoreState,
+  songStore,
+  songStorePlugins,
+  songCommandStoreState,
+  songCommandStore,
+} from "./song";
 import { projectStoreState, projectStore } from "./project";
 import { uiStoreState, uiStore } from "./ui";
 import { settingStoreState, settingStore } from "./setting";
@@ -32,17 +38,28 @@ import { dictionaryStoreState, dictionaryStore } from "./dictionary";
 import { proxyStore, proxyStoreState } from "./proxy";
 import { createPartialStore } from "./vuex";
 import { engineStoreState, engineStore } from "./engine";
+import { filterCharacterInfosByStyleType } from "./utility";
 import {
-  DefaultStyleId,
+  loadContactText,
+  loadHowToUseText,
+  loadOssCommunityInfos,
+  loadOssLicenses,
+  loadPolicyText,
+  loadPrivacyPolicyText,
+  loadQAndAText,
+  loadUpdateInfos,
+} from "@/domain/staticAssets";
+import {
+  type DefaultStyleId,
   EngineId,
   SpeakerId,
   StyleId,
-  Voice,
+  type Voice,
 } from "@/type/preload";
+import { isProduction } from "@/helpers/platform";
 
-export const storeKey: InjectionKey<
-  Store<State, AllGetters, AllActions, AllMutations>
-> = Symbol();
+export type Store = BaseStore<State, AllGetters, AllActions, AllMutations>;
+export const storeKey: InjectionKey<Store> = Symbol();
 
 export const indexStoreState: IndexStoreState = {
   defaultStyleIds: [],
@@ -124,10 +141,16 @@ export const indexStore = createPartialStore<IndexStoreTypes>({
   },
 
   GET_ALL_VOICES: {
-    getter(state) {
-      const flattenCharacters = Object.values(state.characterInfos).flatMap(
+    getter: (state) => (styleType: "all" | "singerLike" | "talk") => {
+      let flattenCharacters = Object.values(state.characterInfos).flatMap(
         (characterInfos) => characterInfos,
       );
+      if (styleType !== "all") {
+        flattenCharacters = filterCharacterInfosByStyleType(
+          flattenCharacters,
+          styleType,
+        );
+      }
       const flattenVoices: Voice[] = flattenCharacters.flatMap((c) =>
         c.metas.styles.map((s) => ({
           engineId: EngineId(s.engineId),
@@ -142,54 +165,54 @@ export const indexStore = createPartialStore<IndexStoreTypes>({
 
   GET_HOW_TO_USE_TEXT: {
     async action() {
-      return await window.backend.getHowToUseText();
+      return await loadHowToUseText();
     },
   },
 
   GET_CONTACT_TEXT: {
     async action() {
-      return await window.backend.getContactText();
+      return await loadContactText();
     },
   },
 
   GET_Q_AND_A_TEXT: {
     async action() {
-      return await window.backend.getQAndAText();
+      return await loadQAndAText();
     },
   },
 
   GET_POLICY_TEXT: {
     async action() {
-      return await window.backend.getPolicyText();
+      return await loadPolicyText();
     },
   },
 
   GET_OSS_LICENSES: {
     async action() {
-      return await window.backend.getOssLicenses();
+      return await loadOssLicenses();
     },
   },
 
   GET_UPDATE_INFOS: {
     async action() {
-      return await window.backend.getUpdateInfos();
+      return await loadUpdateInfos();
     },
   },
 
   GET_OSS_COMMUNITY_INFOS: {
     async action() {
-      return await window.backend.getOssCommunityInfos();
+      return await loadOssCommunityInfos();
     },
   },
 
   GET_PRIVACY_POLICY_TEXT: {
     async action() {
-      return await window.backend.getPrivacyPolicyText();
+      return await loadPrivacyPolicyText();
     },
   },
 
   LOAD_DEFAULT_STYLE_IDS: {
-    async action({ commit, getters }) {
+    async action({ mutations, getters }) {
       let defaultStyleIds = await window.backend.getSetting("defaultStyleIds");
 
       const allCharacterInfos = getters.GET_ALL_CHARACTER_INFOS;
@@ -233,7 +256,7 @@ export const indexStore = createPartialStore<IndexStoreTypes>({
         }),
       ];
 
-      commit("SET_DEFAULT_STYLE_IDS", { defaultStyleIds });
+      mutations.SET_DEFAULT_STYLE_IDS({ defaultStyleIds });
     },
   },
 
@@ -270,17 +293,17 @@ export const indexStore = createPartialStore<IndexStoreTypes>({
         }
       }
     },
-    async action({ commit }, defaultStyleIds) {
-      commit("SET_DEFAULT_STYLE_IDS", { defaultStyleIds });
+    async action({ mutations }, defaultStyleIds) {
+      mutations.SET_DEFAULT_STYLE_IDS({ defaultStyleIds });
       await window.backend.setSetting("defaultStyleIds", defaultStyleIds);
     },
   },
 
   LOAD_USER_CHARACTER_ORDER: {
-    async action({ commit }) {
+    async action({ mutations }) {
       const userCharacterOrder =
         await window.backend.getSetting("userCharacterOrder");
-      commit("SET_USER_CHARACTER_ORDER", { userCharacterOrder });
+      mutations.SET_USER_CHARACTER_ORDER({ userCharacterOrder });
     },
   },
 
@@ -288,8 +311,8 @@ export const indexStore = createPartialStore<IndexStoreTypes>({
     mutation(state, { userCharacterOrder }) {
       state.userCharacterOrder = userCharacterOrder;
     },
-    async action({ commit }, userCharacterOrder) {
-      commit("SET_USER_CHARACTER_ORDER", { userCharacterOrder });
+    async action({ mutations }, userCharacterOrder) {
+      mutations.SET_USER_CHARACTER_ORDER({ userCharacterOrder });
       await window.backend.setSetting("userCharacterOrder", userCharacterOrder);
     },
   },
@@ -308,16 +331,16 @@ export const indexStore = createPartialStore<IndexStoreTypes>({
   },
 
   INIT_VUEX: {
-    async action({ dispatch }) {
+    async action({ actions }) {
       const promises = [];
 
       // 設定ファイルからstoreへ読み込む
-      promises.push(dispatch("HYDRATE_UI_STORE"));
-      promises.push(dispatch("HYDRATE_PRESET_STORE"));
-      promises.push(dispatch("HYDRATE_SETTING_STORE"));
+      promises.push(actions.HYDRATE_UI_STORE());
+      promises.push(actions.HYDRATE_PRESET_STORE());
+      promises.push(actions.HYDRATE_SETTING_STORE());
 
       await Promise.all(promises).then(() => {
-        dispatch("ON_VUEX_READY");
+        void actions.ON_VUEX_READY();
       });
     },
   },
@@ -326,8 +349,8 @@ export const indexStore = createPartialStore<IndexStoreTypes>({
     mutation(state, { isMultiEngineOffMode }) {
       state.isMultiEngineOffMode = isMultiEngineOffMode;
     },
-    action({ commit }, isMultiEngineOffMode) {
-      commit("SET_IS_MULTI_ENGINE_OFF_MODE", { isMultiEngineOffMode });
+    action({ mutations }, isMultiEngineOffMode) {
+      mutations.SET_IS_MULTI_ENGINE_OFF_MODE({ isMultiEngineOffMode });
     },
   },
 });
@@ -337,7 +360,7 @@ export const store = createStore<State, AllGetters, AllActions, AllMutations>({
     ...uiStoreState,
     ...audioStoreState,
     ...audioPlayerStoreState,
-    ...singingStoreState,
+    ...songStoreState,
     ...commandStoreState,
     ...engineStoreState,
     ...projectStoreState,
@@ -347,8 +370,8 @@ export const store = createStore<State, AllGetters, AllActions, AllMutations>({
     ...presetStoreState,
     ...dictionaryStoreState,
     ...proxyStoreState,
-    ...singingStoreState,
-    ...singingCommandStoreState,
+    ...songStoreState,
+    ...songCommandStoreState,
   },
 
   getters: {
@@ -364,8 +387,8 @@ export const store = createStore<State, AllGetters, AllActions, AllMutations>({
     ...audioCommandStore.getters,
     ...indexStore.getters,
     ...proxyStore.getters,
-    ...singingStore.getters,
-    ...singingCommandStore.getters,
+    ...songStore.getters,
+    ...songCommandStore.getters,
   },
 
   mutations: {
@@ -381,8 +404,8 @@ export const store = createStore<State, AllGetters, AllActions, AllMutations>({
     ...dictionaryStore.mutations,
     ...indexStore.mutations,
     ...proxyStore.mutations,
-    ...singingStore.mutations,
-    ...singingCommandStore.mutations,
+    ...songStore.mutations,
+    ...songCommandStore.mutations,
   },
 
   actions: {
@@ -398,17 +421,15 @@ export const store = createStore<State, AllGetters, AllActions, AllMutations>({
     ...dictionaryStore.actions,
     ...indexStore.actions,
     ...proxyStore.actions,
-    ...singingStore.actions,
-    ...singingCommandStore.actions,
+    ...songStore.actions,
+    ...songCommandStore.actions,
   },
-  strict: process.env.NODE_ENV !== "production",
+
+  plugins: [...songStorePlugins, ...audioContextStorePlugins],
+
+  strict: !isProduction,
 });
 
-export const useStore = (): Store<
-  State,
-  AllGetters,
-  AllActions,
-  AllMutations
-> => {
+export const useStore = (): Store => {
   return baseUseStore(storeKey);
 };

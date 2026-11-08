@@ -1,8 +1,8 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * VOICEVOX Engine
- * VOICEVOXの音声合成エンジンです。
+ * VOICEVOX ENGINE OSS
+ * VOICEVOX OSS の音声合成エンジンです。
  *
  * The version of the OpenAPI document: latest
  * 
@@ -21,43 +21,43 @@ import {
 } from './FramePhoneme';
 
 /**
- * フレームごとの音声合成用のクエリ
+ * フレームごとの音声合成用のクエリ。
  * @export
  * @interface FrameAudioQuery
  */
 export interface FrameAudioQuery {
     /**
-     * 
+     * フレームごとの基本周波数
      * @type {Array<number>}
      * @memberof FrameAudioQuery
      */
     f0: Array<number>;
     /**
-     * 
+     * フレームごとの音量
      * @type {Array<number>}
      * @memberof FrameAudioQuery
      */
     volume: Array<number>;
     /**
-     * 
+     * 音素のリスト
      * @type {Array<FramePhoneme>}
      * @memberof FrameAudioQuery
      */
     phonemes: Array<FramePhoneme>;
     /**
-     * 
+     * 全体の音量
      * @type {number}
      * @memberof FrameAudioQuery
      */
     volumeScale: number;
     /**
-     * 
+     * 音声データの出力サンプリングレート
      * @type {number}
      * @memberof FrameAudioQuery
      */
     outputSamplingRate: number;
     /**
-     * 
+     * 音声データをステレオ出力するか否か
      * @type {boolean}
      * @memberof FrameAudioQuery
      */

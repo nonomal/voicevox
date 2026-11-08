@@ -1,69 +1,87 @@
 <template>
   <AcceptRetrieveTelemetryDialog
-    v-model="isAcceptRetrieveTelemetryDialogOpenComputed"
+    v-model:dialogOpened="isAcceptRetrieveTelemetryDialogOpenComputed"
   />
-  <AcceptTermsDialog v-model="isAcceptTermsDialogOpenComputed" />
-  <HelpDialog v-model="isHelpDialogOpenComputed" />
-  <SettingDialog v-model="isSettingDialogOpenComputed" />
-  <HotkeySettingDialog v-model="isHotkeySettingDialogOpenComputed" />
-  <ToolBarCustomDialog v-model="isToolbarSettingDialogOpenComputed" />
+  <AcceptTermsDialog v-model:dialogOpened="isAcceptTermsDialogOpenComputed" />
+  <SettingDialog v-model:dialogOpened="isSettingDialogOpenComputed" />
+  <HotkeySettingDialog
+    v-model:dialogOpened="isHotkeySettingDialogOpenComputed"
+  />
+  <ToolBarCustomDialog
+    v-model:dialogOpened="isToolbarSettingDialogOpenComputed"
+  />
+  <CharacterListDialog
+    v-if="orderedAllCharacterInfos.length > 0"
+    v-model:dialogOpened="isCharacterListDialogOpenComputed"
+    :characterInfos="orderedAllCharacterInfos"
+  />
   <CharacterOrderDialog
     v-if="orderedAllCharacterInfos.length > 0"
-    v-model="isCharacterOrderDialogOpenComputed"
-    :character-infos="orderedAllCharacterInfos"
+    v-model:dialogOpened="isOldCharacterOrderDialogOpenComputed"
+    :characterInfos="orderedAllCharacterInfos"
   />
   <DefaultStyleListDialog
     v-if="orderedTalkCharacterInfos.length > 0"
-    v-model="isDefaultStyleSelectDialogOpenComputed"
-    :character-infos="orderedTalkCharacterInfos"
+    v-model:dialogOpened="isOldDefaultStyleSelectDialogOpenComputed"
+    :characterInfos="orderedTalkCharacterInfos"
   />
-  <DictionaryManageDialog v-model="isDictionaryManageDialogOpenComputed" />
-  <EngineManageDialog v-model="isEngineManageDialogOpenComputed" />
+  <DictionaryManageDialog
+    v-model:dialogOpened="isDictionaryManageDialogOpenComputed"
+  />
+  <EngineManageDialog v-model:dialogOpened="isEngineManageDialogOpenComputed" />
   <UpdateNotificationDialogContainer
-    :can-open-dialog="canOpenNotificationDialog"
+    v-model:dialogOpened="isUpdateNotificationDialogOpenComputed"
+    :canOpenDialog="isEnginesReady"
   />
-  <ImportMidiDialog v-model="isImportMidiDialogOpenComputed" />
+  <EngineUpdateNotificationDialogContainer
+    v-if="downloadableDefaultEngineId != undefined"
+    v-model:dialogOpened="isEngineUpdateNotificationDialogOpenComputed"
+    :downloadableDefaultEngineId
+    :canOpenDialog="isEnginesReady"
+  />
+  <ExportSongAudioDialog v-model:dialogOpened="isExportSongAudioDialogOpen" />
+  <ImportSongProjectDialog v-model="isImportSongProjectDialogOpenComputed" />
+  <PresetManageDialog v-model:dialogOpened="isPresetManageDialogOpenComputed" />
+  <HelpDialog v-model:dialogOpened="isHelpDialogOpenComputed" />
 </template>
 
 <script setup lang="ts">
 import { computed } from "vue";
-import HelpDialog from "@/components/Dialog/HelpDialog/HelpDialog.vue";
-import SettingDialog from "@/components/Dialog/SettingDialog.vue";
+import SettingDialog from "@/components/Dialog/SettingDialog/SettingDialog.vue";
 import HotkeySettingDialog from "@/components/Dialog/HotkeySettingDialog.vue";
 import ToolBarCustomDialog from "@/components/Dialog/ToolBarCustomDialog.vue";
-import DefaultStyleListDialog from "@/components/Dialog/DefaultStyleListDialog.vue";
-import CharacterOrderDialog from "@/components/Dialog/CharacterOrderDialog.vue";
-import AcceptRetrieveTelemetryDialog from "@/components/Dialog/AcceptRetrieveTelemetryDialog.vue";
-import AcceptTermsDialog from "@/components/Dialog/AcceptTermsDialog.vue";
-import DictionaryManageDialog from "@/components/Dialog/DictionaryManageDialog.vue";
+import DefaultStyleListDialog from "@/components/Dialog/OldDefaultStyleListDialog.vue";
+import CharacterListDialog from "@/components/Dialog/CharacterListDialog.vue";
+import CharacterOrderDialog from "@/components/Dialog/OldCharacterOrderDialog.vue";
+import AcceptRetrieveTelemetryDialog from "@/components/Dialog/AcceptDialog/AcceptRetrieveTelemetryDialog.vue";
+import AcceptTermsDialog from "@/components/Dialog/AcceptDialog/AcceptTermsDialog.vue";
+import DictionaryManageDialog from "@/components/Dialog/DictionaryManageDialog/DictionaryManageDialog.vue";
 import EngineManageDialog from "@/components/Dialog/EngineManageDialog.vue";
 import UpdateNotificationDialogContainer from "@/components/Dialog/UpdateNotificationDialog/Container.vue";
-import ImportMidiDialog from "@/components/Dialog/ImportMidiDialog.vue";
+import EngineUpdateNotificationDialogContainer from "@/components/Dialog/UpdateNotificationDialog/EngineContainer.vue";
+import ImportSongProjectDialog from "@/components/Dialog/ImportSongProjectDialog.vue";
+import ExportSongAudioDialog from "@/components/Dialog/ExportSongAudioDialog/Container.vue";
+import PresetManageDialog from "@/components/Dialog/PresetManageDialog.vue";
+import HelpDialog from "@/components/Dialog/HelpDialog/HelpDialog.vue";
 import { useStore } from "@/store";
 import { filterCharacterInfosByStyleType } from "@/store/utility";
 
-const props = defineProps<{
+defineProps<{
   isEnginesReady: boolean;
 }>();
 const store = useStore();
 
-// ライセンス表示
-const isHelpDialogOpenComputed = computed({
-  get: () => store.state.isHelpDialogOpen,
-  set: (val) => store.dispatch("SET_DIALOG_OPEN", { isHelpDialogOpen: val }),
-});
-
 // 設定
 const isSettingDialogOpenComputed = computed({
   get: () => store.state.isSettingDialogOpen,
-  set: (val) => store.dispatch("SET_DIALOG_OPEN", { isSettingDialogOpen: val }),
+  set: (val) => store.actions.SET_DIALOG_OPEN({ isSettingDialogOpen: val }),
 });
 
 // ショートカットキー設定
 const isHotkeySettingDialogOpenComputed = computed({
   get: () => store.state.isHotkeySettingDialogOpen,
   set: (val) =>
-    store.dispatch("SET_DIALOG_OPEN", {
+    store.actions.SET_DIALOG_OPEN({
       isHotkeySettingDialogOpen: val,
     }),
 });
@@ -72,7 +90,7 @@ const isHotkeySettingDialogOpenComputed = computed({
 const isToolbarSettingDialogOpenComputed = computed({
   get: () => store.state.isToolbarSettingDialogOpen,
   set: (val) =>
-    store.dispatch("SET_DIALOG_OPEN", {
+    store.actions.SET_DIALOG_OPEN({
       isToolbarSettingDialogOpen: val,
     }),
 });
@@ -81,8 +99,17 @@ const isToolbarSettingDialogOpenComputed = computed({
 const isAcceptTermsDialogOpenComputed = computed({
   get: () => store.state.isAcceptTermsDialogOpen,
   set: (val) =>
-    store.dispatch("SET_DIALOG_OPEN", {
+    store.actions.SET_DIALOG_OPEN({
       isAcceptTermsDialogOpen: val,
+    }),
+});
+
+// キャラクター＆スタイルの管理
+const isCharacterListDialogOpenComputed = computed({
+  get: () => store.state.isCharacterListDialogOpen,
+  set: (val) =>
+    store.actions.SET_DIALOG_OPEN({
+      isCharacterListDialogOpen: val,
     }),
 });
 
@@ -90,17 +117,16 @@ const isAcceptTermsDialogOpenComputed = computed({
 const orderedAllCharacterInfos = computed(
   () => store.getters.GET_ORDERED_ALL_CHARACTER_INFOS,
 );
-const isCharacterOrderDialogOpenComputed = computed({
+const isOldCharacterOrderDialogOpenComputed = computed({
   get: () =>
     !store.state.isAcceptTermsDialogOpen &&
-    store.state.isCharacterOrderDialogOpen,
+    store.state.isOldCharacterOrderDialogOpen,
   set: (val) =>
-    store.dispatch("SET_DIALOG_OPEN", {
-      isCharacterOrderDialogOpen: val,
+    store.actions.SET_DIALOG_OPEN({
+      isOldCharacterOrderDialogOpen: val,
     }),
 });
 
-// TODO: デフォルトスタイル選択(ソング)の実装
 // デフォルトスタイル選択(トーク)
 const orderedTalkCharacterInfos = computed(() => {
   return filterCharacterInfosByStyleType(
@@ -108,14 +134,14 @@ const orderedTalkCharacterInfos = computed(() => {
     "talk",
   );
 });
-const isDefaultStyleSelectDialogOpenComputed = computed({
+const isOldDefaultStyleSelectDialogOpenComputed = computed({
   get: () =>
     !store.state.isAcceptTermsDialogOpen &&
-    !store.state.isCharacterOrderDialogOpen &&
-    store.state.isDefaultStyleSelectDialogOpen,
+    !store.state.isOldCharacterOrderDialogOpen &&
+    store.state.isOldDefaultStyleSelectDialogOpen,
   set: (val) =>
-    store.dispatch("SET_DIALOG_OPEN", {
-      isDefaultStyleSelectDialogOpen: val,
+    store.actions.SET_DIALOG_OPEN({
+      isOldDefaultStyleSelectDialogOpen: val,
     }),
 });
 
@@ -123,7 +149,7 @@ const isDefaultStyleSelectDialogOpenComputed = computed({
 const isEngineManageDialogOpenComputed = computed({
   get: () => store.state.isEngineManageDialogOpen,
   set: (val) =>
-    store.dispatch("SET_DIALOG_OPEN", {
+    store.actions.SET_DIALOG_OPEN({
       isEngineManageDialogOpen: val,
     }),
 });
@@ -132,7 +158,7 @@ const isEngineManageDialogOpenComputed = computed({
 const isDictionaryManageDialogOpenComputed = computed({
   get: () => store.state.isDictionaryManageDialogOpen,
   set: (val) =>
-    store.dispatch("SET_DIALOG_OPEN", {
+    store.actions.SET_DIALOG_OPEN({
       isDictionaryManageDialogOpen: val,
     }),
 });
@@ -140,32 +166,83 @@ const isDictionaryManageDialogOpenComputed = computed({
 const isAcceptRetrieveTelemetryDialogOpenComputed = computed({
   get: () =>
     !store.state.isAcceptTermsDialogOpen &&
-    !store.state.isCharacterOrderDialogOpen &&
-    !store.state.isDefaultStyleSelectDialogOpen &&
+    !store.state.isOldCharacterOrderDialogOpen &&
+    !store.state.isOldDefaultStyleSelectDialogOpen &&
     store.state.isAcceptRetrieveTelemetryDialogOpen,
   set: (val) =>
-    store.dispatch("SET_DIALOG_OPEN", {
+    store.actions.SET_DIALOG_OPEN({
       isAcceptRetrieveTelemetryDialogOpen: val,
     }),
 });
 
 // エディタのアップデート確認ダイアログ
-const canOpenNotificationDialog = computed(() => {
-  return (
+// NOTE: isEnginesReadyをここに入れると、エンジン起動中に開閉フラグが立ち、何も表示されないままLOCK_UIとLOCK_MENUBARされる。
+//       そのためisEnginesReadyはcanOpenDialogで渡している。
+// ref: https://github.com/VOICEVOX/voicevox/blob/933997fab22a9f25db89c0c055273dd639535d9f/src/store/ui.ts#L195-L197
+const isUpdateNotificationDialogOpenComputed = computed({
+  get: () =>
     !store.state.isAcceptTermsDialogOpen &&
-    !store.state.isCharacterOrderDialogOpen &&
-    !store.state.isDefaultStyleSelectDialogOpen &&
+    !store.state.isOldCharacterOrderDialogOpen &&
+    !store.state.isOldDefaultStyleSelectDialogOpen &&
     !store.state.isAcceptRetrieveTelemetryDialogOpen &&
-    props.isEnginesReady
-  );
+    store.state.isUpdateNotificationDialogOpen,
+  set: (val) =>
+    store.actions.SET_DIALOG_OPEN({
+      isUpdateNotificationDialogOpen: val,
+    }),
 });
 
-// MIDIインポート時の設定ダイアログ
-const isImportMidiDialogOpenComputed = computed({
-  get: () => store.state.isImportMidiDialogOpen,
+// エンジンのアップデート確認ダイアログ
+const downloadableDefaultEngineId = computed(
+  () => store.state.downloadableDefaultEngineId,
+);
+const isEngineUpdateNotificationDialogOpenComputed = computed({
+  get: () =>
+    !store.state.isAcceptTermsDialogOpen &&
+    !store.state.isOldCharacterOrderDialogOpen &&
+    !store.state.isOldDefaultStyleSelectDialogOpen &&
+    !store.state.isAcceptRetrieveTelemetryDialogOpen &&
+    !store.state.isUpdateNotificationDialogOpen &&
+    store.state.isEngineUpdateNotificationDialogOpen,
   set: (val) =>
-    store.dispatch("SET_DIALOG_OPEN", {
-      isImportMidiDialogOpen: val,
+    store.actions.SET_DIALOG_OPEN({
+      isEngineUpdateNotificationDialogOpen: val,
+    }),
+});
+
+// ソングのオーディオエクスポート時の設定ダイアログ
+const isExportSongAudioDialogOpen = computed({
+  get: () => store.state.isExportSongAudioDialogOpen,
+  set: (val) =>
+    store.actions.SET_DIALOG_OPEN({
+      isExportSongAudioDialogOpen: val,
+    }),
+});
+
+// ソングのプロジェクトファイルのインポート時の設定ダイアログ
+const isImportSongProjectDialogOpenComputed = computed({
+  get: () => store.state.isImportSongProjectDialogOpen,
+  set: (val) =>
+    store.actions.SET_DIALOG_OPEN({
+      isImportSongProjectDialogOpen: val,
+    }),
+});
+
+// プリセット管理ダイアログ
+const isPresetManageDialogOpenComputed = computed({
+  get: () => store.state.isPresetManageDialogOpen,
+  set: (val) =>
+    store.actions.SET_DIALOG_OPEN({
+      isPresetManageDialogOpen: val,
+    }),
+});
+
+// ヘルプダイアログ
+const isHelpDialogOpenComputed = computed({
+  get: () => store.state.isHelpDialogOpen,
+  set: (val) =>
+    store.actions.SET_DIALOG_OPEN({
+      isHelpDialogOpen: val,
     }),
 });
 </script>

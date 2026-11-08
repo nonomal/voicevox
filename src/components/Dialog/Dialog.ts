@@ -1,40 +1,53 @@
-import { Dialog, DialogChainObject, Notify, Loading } from "quasar";
+import { Dialog, Notify, Loading } from "quasar";
 import SaveAllResultDialog from "./SaveAllResultDialog.vue";
-import { AudioKey, ConfirmedTips } from "@/type/preload";
-import {
+import QuestionDialog from "./TextDialog/QuestionDialog.vue";
+import MessageDialog from "./TextDialog/MessageDialog.vue";
+import type { DialogType } from "./TextDialog/common";
+import type { AudioKey, ConfirmedTips } from "@/type/preload";
+import type {
   AllActions,
   SaveResultObject,
   SaveResult,
   ErrorTypeForSaveAllResultDialog,
 } from "@/store/type";
-import { Dispatch } from "@/store/vuex";
+import type { DotNotationDispatch } from "@/store/vuex";
 import { withProgress } from "@/store/ui";
+import { errorToMessage } from "@/helpers/errorHelper";
 
-type MediaType = "audio" | "text";
+type MediaType = "audio" | "text" | "project" | "label";
 
-export type CommonDialogResult = "OK" | "CANCEL";
-export type CommonDialogOptions = {
-  alert: {
-    title: string;
-    message: string;
-    ok?: string;
-  };
-  confirm: {
-    title: string;
-    message: string;
-    html?: boolean;
-    actionName: string;
-    cancel?: string;
-  };
-  warning: {
-    title: string;
-    message: string;
-    actionName: string;
-    cancel?: string;
-  };
+export type TextDialogResult = "OK" | "CANCEL";
+export type MessageDialogOptions = {
+  type?: DialogType;
+  title: string;
+  message: string;
+  ok?: string;
 };
-export type CommonDialogType = keyof CommonDialogOptions;
-type CommonDialogCallback = (value: CommonDialogResult) => void;
+export type ConfirmDialogOptions = {
+  type?: DialogType;
+  title: string;
+  message: string;
+  actionName: string; // ボタンテキスト
+  isPrimaryColorButton?: boolean; // ボタンをPrimary色にするか
+  cancel?: string;
+};
+export type WarningDialogOptions = {
+  type?: DialogType;
+  title: string;
+  message: string;
+  actionName: string; // ボタンテキスト
+  isWarningColorButton?: boolean; // ボタンをWarning色にするか
+  cancel?: string;
+};
+export type QuestionDialogButtonColor = "display" | "primary" | "warning";
+export type QuestionDialogOptions = {
+  type?: DialogType;
+  title: string;
+  message: string;
+  buttons: (string | { text: string; color: QuestionDialogButtonColor })[];
+  cancel: number;
+  default?: number;
+};
 
 export type NotifyAndNotShowAgainButtonOption = {
   message: string;
@@ -43,190 +56,196 @@ export type NotifyAndNotShowAgainButtonOption = {
   tipName: keyof ConfirmedTips;
 };
 
-export type LoadingScreenOption = { message: string };
-
 // 汎用ダイアログを表示
-export const showAlertDialog = async (
-  options: CommonDialogOptions["alert"],
-) => {
+
+/** メッセージを知らせるダイアログ */
+export const showMessageDialog = async (options: MessageDialogOptions) => {
   options.ok ??= "閉じる";
 
-  return new Promise((resolve: CommonDialogCallback) => {
-    setCommonDialogCallback(
-      Dialog.create({
-        title: options.title,
-        message: options.message,
-        ok: {
-          label: options.ok,
-          flat: true,
-          textColor: "display",
-        },
-      }),
-      resolve,
-    );
+  const { promise, resolve } = Promise.withResolvers<void>();
+  Dialog.create({
+    component: MessageDialog,
+    componentProps: {
+      type: options.type ?? "info",
+      title: options.title,
+      message: options.message,
+      ok: options.ok,
+    },
+  }).onOk(() => resolve());
+
+  await promise;
+
+  return "OK" as const;
+};
+
+/** エラーが起こったことを知らせるダイアログ */
+export const showAlertDialog = async (
+  options: Omit<MessageDialogOptions, "type">,
+) => {
+  return await showMessageDialog({
+    ...options,
+    type: "error",
   });
 };
 
-/**
- * htmlフラグを`true`にする場合、外部からの汚染された文字列を`title`や`message`に含めてはいけません。
- * see https://quasar.dev/quasar-plugins/dialog#using-html
- */
-export const showConfirmDialog = async (
-  options: CommonDialogOptions["confirm"],
-) => {
+/** 例外からエラーダイアログを表示する便利関数 */
+export const showErrorDialog = async (title: string, e: unknown) => {
+  return showAlertDialog({
+    title,
+    message: errorToMessage(e),
+  });
+};
+
+/** 続行することが望まれそうな場合の質問ダイアログ */
+export const showConfirmDialog = async (options: ConfirmDialogOptions) => {
   options.cancel ??= "キャンセル";
 
-  return new Promise((resolve: CommonDialogCallback) => {
-    setCommonDialogCallback(
-      Dialog.create({
-        title: options.title,
-        message: options.message,
-        persistent: true, // ダイアログ外側押下時・Esc押下時にユーザが設定ができたと思い込むことを防止する
-        focus: "ok",
-        html: options.html,
-        ok: {
-          flat: true,
-          label: options.actionName,
-          textColor: "display",
-        },
-        cancel: {
-          flat: true,
-          label: options.cancel,
-          textColor: "display",
-        },
-      }),
-      resolve,
-    );
-  });
+  const { promise, resolve } = Promise.withResolvers<number>();
+  Dialog.create({
+    component: QuestionDialog,
+    componentProps: {
+      type: options.type ?? "question",
+      title: options.title,
+      message: options.message,
+      buttons: [
+        options.cancel,
+        options.isPrimaryColorButton
+          ? { text: options.actionName, color: "primary" }
+          : options.actionName,
+      ],
+      default: 1,
+    },
+  }).onOk(({ index }: { index: number }) => resolve(index));
+
+  const index = await promise;
+
+  return index === 1 ? "OK" : "CANCEL";
 };
 
-export const showWarningDialog = async (
-  options: CommonDialogOptions["warning"],
-) => {
+/** キャンセルすることが望まれそうな場合の質問ダイアログ */
+export const showWarningDialog = async (options: WarningDialogOptions) => {
   options.cancel ??= "キャンセル";
 
-  return new Promise((resolve: CommonDialogCallback) => {
-    setCommonDialogCallback(
-      Dialog.create({
-        title: options.title,
-        message: options.message,
-        persistent: true,
-        focus: "cancel",
-        ok: {
-          label: options.actionName,
-          flat: true,
-          textColor: "warning",
-        },
-        cancel: {
-          label: options.cancel,
-          flat: true,
-          textColor: "display",
-        },
-      }),
-      resolve,
-    );
-  });
+  const { promise, resolve } = Promise.withResolvers<number>();
+  Dialog.create({
+    component: QuestionDialog,
+    componentProps: {
+      type: options.type ?? "warning",
+      title: options.title,
+      message: options.message,
+      buttons: [
+        options.cancel,
+        options.isWarningColorButton
+          ? { text: options.actionName, color: "warning" }
+          : options.actionName,
+      ],
+      default: 0,
+    },
+  }).onOk(({ index }: { index: number }) => resolve(index));
+
+  const index = await promise;
+
+  return index === 1 ? "OK" : "CANCEL";
 };
 
-const setCommonDialogCallback = (
-  dialog: DialogChainObject,
-  resolve: (result: CommonDialogResult) => void,
-) => {
-  return dialog
-    .onOk(() => {
-      resolve("OK");
-    })
-    .onCancel(() => {
-      resolve("CANCEL");
-    });
+/** キャンセル以外に複数の選択肢がある質問ダイアログ */
+export const showQuestionDialog = async (options: QuestionDialogOptions) => {
+  const { promise, resolve } = Promise.withResolvers<number>();
+  Dialog.create({
+    component: QuestionDialog,
+    componentProps: {
+      type: options.type ?? "question",
+      title: options.title,
+      message: options.message,
+      buttons: options.buttons,
+      persistent: options.cancel == undefined,
+      default: options.default,
+    },
+  })
+    .onOk(({ index }: { index: number }) => resolve(index))
+    .onCancel(() => resolve(options.cancel));
+
+  const index = await promise;
+
+  return index;
 };
 
 export async function generateAndSaveOneAudioWithDialog({
   audioKey,
-  dispatch,
+  actions,
   filePath,
   disableNotifyOnGenerate,
 }: {
   audioKey: AudioKey;
-  dispatch: Dispatch<AllActions>;
+  actions: DotNotationDispatch<AllActions>;
   filePath?: string;
   disableNotifyOnGenerate: boolean;
 }): Promise<void> {
   const result: SaveResultObject = await withProgress(
-    dispatch("GENERATE_AND_SAVE_AUDIO", {
+    actions.GENERATE_AND_SAVE_AUDIO_FILE({
       audioKey,
       filePath,
     }),
-    dispatch,
+    actions,
   );
 
-  if (result.result === "CANCELED") return;
-
-  if (result.result === "SUCCESS") {
-    if (disableNotifyOnGenerate) return;
-    // 書き出し成功時に通知をする
-    showWriteSuccessNotify({
-      mediaType: "audio",
-      dispatch,
-    });
-  } else {
-    showWriteErrorDialog({ mediaType: "audio", result, dispatch });
-  }
+  if (result == undefined) return;
+  notifyResult(result, "audio", actions, disableNotifyOnGenerate);
 }
 
 export async function multiGenerateAndSaveAudioWithDialog({
   audioKeys,
-  dispatch,
+  actions,
   dirPath,
   disableNotifyOnGenerate,
 }: {
   audioKeys: AudioKey[];
-  dispatch: Dispatch<AllActions>;
+  actions: DotNotationDispatch<AllActions>;
   dirPath?: string;
   disableNotifyOnGenerate: boolean;
 }): Promise<void> {
   const result = await withProgress(
-    dispatch("MULTI_GENERATE_AND_SAVE_AUDIO", {
+    actions.MULTI_GENERATE_AND_SAVE_AUDIO_FILE({
       audioKeys,
       dirPath,
       callback: (finishedCount) =>
-        dispatch("SET_PROGRESS_FROM_COUNT", {
+        actions.SET_PROGRESS_FROM_COUNT({
           finishedCount,
           totalCount: audioKeys.length,
         }),
     }),
-    dispatch,
+    actions,
   );
 
-  if (result == undefined) return;
+  if (result === "canceled") return;
 
   // 書き出し成功時の出力先パスを配列に格納
-  const successArray: Array<string | undefined> = result.flatMap((result) =>
+  const successArray: (string | undefined)[] = result.flatMap((result) =>
     result.result === "SUCCESS" ? result.path : [],
   );
 
   // 書き込みエラーを配列に格納
-  const writeErrorArray: Array<ErrorTypeForSaveAllResultDialog> =
-    result.flatMap((result) =>
+  const writeErrorArray: ErrorTypeForSaveAllResultDialog[] = result.flatMap(
+    (result) =>
       result.result === "WRITE_ERROR"
         ? { path: result.path ?? "", message: result.errorMessage ?? "" }
         : [],
-    );
+  );
 
   // エンジンエラーを配列に格納
-  const engineErrorArray: Array<ErrorTypeForSaveAllResultDialog> =
-    result.flatMap((result) =>
+  const engineErrorArray: ErrorTypeForSaveAllResultDialog[] = result.flatMap(
+    (result) =>
       result.result === "ENGINE_ERROR"
         ? { path: result.path ?? "", message: result.errorMessage ?? "" }
         : [],
-    );
+  );
 
   if (successArray.length === result.length) {
     if (disableNotifyOnGenerate) return;
     // 書き出し成功時に通知をする
     showWriteSuccessNotify({
       mediaType: "audio",
-      dispatch,
+      actions,
     });
   }
 
@@ -243,75 +262,57 @@ export async function multiGenerateAndSaveAudioWithDialog({
 }
 
 export async function generateAndConnectAndSaveAudioWithDialog({
-  dispatch,
+  actions,
   filePath,
   disableNotifyOnGenerate,
 }: {
-  dispatch: Dispatch<AllActions>;
+  actions: DotNotationDispatch<AllActions>;
   filePath?: string;
   disableNotifyOnGenerate: boolean;
 }): Promise<void> {
   const result = await withProgress(
-    dispatch("GENERATE_AND_CONNECT_AND_SAVE_AUDIO", {
+    actions.GENERATE_AND_CONNECT_AND_SAVE_AUDIO_FILE({
       filePath,
       callback: (finishedCount, totalCount) =>
-        dispatch("SET_PROGRESS_FROM_COUNT", { finishedCount, totalCount }),
+        actions.SET_PROGRESS_FROM_COUNT({ finishedCount, totalCount }),
     }),
-    dispatch,
+    actions,
   );
 
-  if (result == undefined || result.result === "CANCELED") return;
-
-  if (result.result === "SUCCESS") {
-    if (disableNotifyOnGenerate) return;
-    showWriteSuccessNotify({
-      mediaType: "audio",
-      dispatch,
-    });
-  } else {
-    showWriteErrorDialog({ mediaType: "audio", result, dispatch });
-  }
+  notifyResult(result, "audio", actions, disableNotifyOnGenerate);
 }
 
 export async function connectAndExportTextWithDialog({
-  dispatch,
+  actions,
   filePath,
   disableNotifyOnGenerate,
 }: {
-  dispatch: Dispatch<AllActions>;
+  actions: DotNotationDispatch<AllActions>;
   filePath?: string;
   disableNotifyOnGenerate: boolean;
 }): Promise<void> {
-  const result = await dispatch("CONNECT_AND_EXPORT_TEXT", {
+  const result = await actions.CONNECT_AND_EXPORT_TEXT({
     filePath,
   });
-
-  if (result == undefined || result.result === "CANCELED") return;
-
-  if (result.result === "SUCCESS") {
-    if (disableNotifyOnGenerate) return;
-    showWriteSuccessNotify({
-      mediaType: "text",
-      dispatch,
-    });
-  } else {
-    showWriteErrorDialog({ mediaType: "text", result, dispatch });
-  }
+  if (!result) return;
+  notifyResult(result, "text", actions, disableNotifyOnGenerate);
 }
 
 // 書き出し成功時の通知を表示
 const showWriteSuccessNotify = ({
   mediaType,
-  dispatch,
+  actions,
 }: {
   mediaType: MediaType;
-  dispatch: Dispatch<AllActions>;
+  actions: DotNotationDispatch<AllActions>;
 }): void => {
   const mediaTypeNames: Record<MediaType, string> = {
     audio: "音声",
     text: "テキスト",
+    project: "プロジェクト",
+    label: "labファイル",
   };
-  dispatch("SHOW_NOTIFY_AND_NOT_SHOW_AGAIN_BUTTON", {
+  void actions.SHOW_NOTIFY_AND_NOT_SHOW_AGAIN_BUTTON({
     message: `${mediaTypeNames[mediaType]}を書き出しました`,
     tipName: "notifyOnGenerate",
   });
@@ -321,15 +322,15 @@ const showWriteSuccessNotify = ({
 const showWriteErrorDialog = ({
   mediaType,
   result,
-  dispatch,
+  actions,
 }: {
   mediaType: MediaType;
   result: SaveResultObject;
-  dispatch: Dispatch<AllActions>;
+  actions: DotNotationDispatch<AllActions>;
 }) => {
   if (mediaType === "text") {
     // テキスト書き出し時のエラーを出力
-    dispatch("SHOW_ALERT_DIALOG", {
+    void actions.SHOW_ALERT_DIALOG({
       title: "テキストの書き出しに失敗しました。",
       message:
         "書き込みエラーによって失敗しました。空き容量があることや、書き込み権限があることをご確認ください。",
@@ -345,10 +346,29 @@ const showWriteErrorDialog = ({
     };
 
     // 音声書き出し時のエラーを出力
-    dispatch("SHOW_ALERT_DIALOG", {
+    void actions.SHOW_ALERT_DIALOG({
       title: "書き出しに失敗しました。",
       message: result.errorMessage ?? defaultErrorMessages[result.result] ?? "",
     });
+  }
+};
+
+/** 保存結果に応じてユーザーに通知する。キャンセルされた場合は何もしない。 */
+export const notifyResult = (
+  result: SaveResultObject,
+  mediaType: MediaType,
+  actions: DotNotationDispatch<AllActions>,
+  disableNotifyOnGenerate: boolean,
+) => {
+  if (result.result === "CANCELED") return;
+  if (result.result === "SUCCESS") {
+    if (disableNotifyOnGenerate) return;
+    showWriteSuccessNotify({
+      mediaType,
+      actions,
+    });
+  } else {
+    showWriteErrorDialog({ mediaType, result, actions });
   }
 };
 
@@ -356,9 +376,9 @@ const NOTIFY_TIMEOUT = 7000;
 
 export const showNotifyAndNotShowAgainButton = (
   {
-    dispatch,
+    actions,
   }: {
-    dispatch: Dispatch<AllActions>;
+    actions: DotNotationDispatch<AllActions>;
   },
   options: NotifyAndNotShowAgainButtonOption,
 ) => {
@@ -369,14 +389,14 @@ export const showNotifyAndNotShowAgainButton = (
     message: options.message,
     color: "toast" + suffix,
     textColor: "toast-display" + suffix,
-    icon: options.isWarning ? "warning" : "info",
+    icon: options.icon,
     timeout: NOTIFY_TIMEOUT,
     actions: [
       {
         label: "今後このメッセージを表示しない",
         textColor: "toast-button-display" + suffix,
         handler: () => {
-          dispatch("SET_CONFIRMED_TIP", {
+          void actions.SET_CONFIRMED_TIP({
             confirmedTip: {
               [options.tipName]: true,
             },
@@ -390,6 +410,8 @@ export const showNotifyAndNotShowAgainButton = (
     ],
   });
 };
+
+type LoadingScreenOption = { message: string };
 
 export const showLoadingScreen = (options: LoadingScreenOption) => {
   Loading.show({

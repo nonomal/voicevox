@@ -1,8 +1,8 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * VOICEVOX Engine
- * VOICEVOXの音声合成エンジンです。
+ * VOICEVOX ENGINE OSS
+ * VOICEVOX OSS の音声合成エンジンです。
  *
  * The version of the OpenAPI document: latest
  * 
@@ -33,13 +33,13 @@ import {
 } from './UpdateInfo';
 
 /**
- * エンジン自体に関する情報
+ * エンジン自体に関する情報。
  * @export
  * @interface EngineManifest
  */
 export interface EngineManifest {
     /**
-     * 
+     * マニフェストのバージョン
      * @type {string}
      * @memberof EngineManifest
      */
@@ -57,61 +57,61 @@ export interface EngineManifest {
      */
     brandName: string;
     /**
-     * 
+     * エンジンのUUID
      * @type {string}
      * @memberof EngineManifest
      */
     uuid: string;
     /**
-     * 
+     * エンジンのURL
      * @type {string}
      * @memberof EngineManifest
      */
     url: string;
     /**
-     * 
+     * エンジンのアイコンをBASE64エンコードしたもの
      * @type {string}
      * @memberof EngineManifest
      */
     icon: string;
     /**
-     * 
+     * デフォルトのサンプリング周波数
      * @type {number}
      * @memberof EngineManifest
      */
     defaultSamplingRate: number;
     /**
-     * 
+     * エンジンのフレームレート
      * @type {number}
      * @memberof EngineManifest
      */
     frameRate: number;
     /**
-     * 
+     * エンジンの利用規約
      * @type {string}
      * @memberof EngineManifest
      */
     termsOfService: string;
     /**
-     * 
+     * エンジンのアップデート情報
      * @type {Array<UpdateInfo>}
      * @memberof EngineManifest
      */
     updateInfos: Array<UpdateInfo>;
     /**
-     * 
+     * 依存関係のライセンス情報
      * @type {Array<LicenseInfo>}
      * @memberof EngineManifest
      */
     dependencyLicenses: Array<LicenseInfo>;
     /**
-     * 
+     * エンジンが対応するvvlibのバージョン
      * @type {string}
      * @memberof EngineManifest
      */
     supportedVvlibManifestVersion?: string;
     /**
-     * 
+     * エンジンが持つ機能
      * @type {SupportedFeatures}
      * @memberof EngineManifest
      */

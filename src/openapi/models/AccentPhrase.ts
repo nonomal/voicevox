@@ -1,8 +1,8 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * VOICEVOX Engine
- * VOICEVOXの音声合成エンジンです。
+ * VOICEVOX ENGINE OSS
+ * VOICEVOX OSS の音声合成エンジンです。
  *
  * The version of the OpenAPI document: latest
  * 
@@ -21,31 +21,31 @@ import {
 } from './Mora';
 
 /**
- * アクセント句ごとの情報
+ * アクセント句ごとの情報。
  * @export
  * @interface AccentPhrase
  */
 export interface AccentPhrase {
     /**
-     * 
+     * モーラのリスト
      * @type {Array<Mora>}
      * @memberof AccentPhrase
      */
     moras: Array<Mora>;
     /**
-     * 
+     * アクセント箇所
      * @type {number}
      * @memberof AccentPhrase
      */
     accent: number;
     /**
-     * 
+     * アクセント句の末尾につく無音モーラ。null の場合は無音モーラを付けない。
      * @type {Mora}
      * @memberof AccentPhrase
      */
     pauseMora?: Mora;
     /**
-     * 
+     * 疑問系かどうか
      * @type {boolean}
      * @memberof AccentPhrase
      */

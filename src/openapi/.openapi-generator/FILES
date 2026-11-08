@@ -4,6 +4,8 @@ index.ts
 models/AccentPhrase.ts
 models/AudioQuery.ts
 models/BaseLibraryInfo.ts
+models/BodySingFrameF0.ts
+models/BodySingFrameVolume.ts
 models/CorsPolicyMode.ts
 models/DownloadableLibraryInfo.ts
 models/EngineManifest.ts
@@ -22,7 +24,6 @@ models/Score.ts
 models/Speaker.ts
 models/SpeakerInfo.ts
 models/SpeakerStyle.ts
-models/SpeakerSupportPermittedSynthesisMorphing.ts
 models/SpeakerSupportedFeatures.ts
 models/StyleInfo.ts
 models/SupportedDevicesInfo.ts

@@ -1,22 +1,22 @@
 <template>
   <QBtn
     flat
-    text-color="display"
+    textColor="display"
     class="full-height cursor-pointer no-border-radius text-no-wrap q-py-none q-px-sm"
     :class="selected ? 'active-menu' : 'bg-transparent'"
-    :disable="disable"
+    :disable
     aria-haspopup="menu"
     @click="
       (menudata.type === 'button' || menudata.type === 'root') &&
-        menudata.onClick?.()
+      menudata.onClick?.()
     "
   >
     {{ menudata.label }}
     <QMenu
       v-if="'subMenu' in menudata"
       v-model="selectedComputed"
-      transition-show="none"
-      transition-hide="none"
+      transitionShow="none"
+      transitionHide="none"
       :fit="true"
     >
       <QList dense>
@@ -38,7 +38,7 @@
 import { computed, ref, watch } from "vue";
 import { debounce } from "quasar";
 import MenuItem from "./MenuItem.vue";
-import { MenuItemData } from "./type";
+import type { MenuItemData } from "./type";
 import { useStore } from "@/store";
 
 const props = withDefaults(
@@ -70,12 +70,13 @@ const subMenuOpenFlags = ref(
     : [],
 );
 
-const isDisabledMenuItem = computed(() => (menu: MenuItemData) => {
+const isDisabledMenuItem = (menu: MenuItemData) => {
   if (menu.type === "separator") return false;
   if (menu.disableWhenUiLocked && uiLocked.value) return true;
-  if (menu.disablreloadingLocked && reloadingLocked.value) return true;
+  if (menu.disableWhileReloadingLock && reloadingLocked.value) return true;
+  if (menu.disabled) return true;
   return false;
-});
+};
 
 const reassignSubMenuOpen = debounce((idx: number) => {
   if (subMenuOpenFlags.value[idx]) return;

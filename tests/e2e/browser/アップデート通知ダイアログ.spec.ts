@@ -3,12 +3,12 @@ import dotenv from "dotenv";
 import semver from "semver";
 import { navigateToMain, gotoHome } from "../navigators";
 import { getNewestQuasarDialog } from "../locators";
-import { UpdateInfo } from "@/type/preload";
+import type { UpdateInfo } from "@/type/preload";
 import { assertNonNullable } from "@/type/utility";
 
 // アップデート通知が出る環境にする
 test.beforeEach(async ({ page }) => {
-  dotenv.config();
+  dotenv.config({ quiet: true });
 
   // 動作環境より新しいバージョン
   const latestVersion = semver.inc(
@@ -21,7 +21,7 @@ test.beforeEach(async ({ page }) => {
   if (process.env.VITE_LATEST_UPDATE_INFOS_URL == undefined) {
     throw new Error("VITE_LATEST_UPDATE_INFOS_URL is not defined");
   }
-  page.route(process.env.VITE_LATEST_UPDATE_INFOS_URL, (route) => {
+  await page.route(process.env.VITE_LATEST_UPDATE_INFOS_URL, async (route) => {
     const updateInfos: UpdateInfo[] = [
       {
         version: latestVersion,
@@ -29,7 +29,7 @@ test.beforeEach(async ({ page }) => {
         contributors: [],
       },
     ];
-    route.fulfill({
+    await route.fulfill({
       status: 200,
       body: JSON.stringify(updateInfos),
     });
@@ -44,11 +44,6 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("アップデートが通知されたりスキップしたりできる", async ({ page }) => {
-  test.skip(
-    process.platform === "darwin",
-    // https://github.com/VOICEVOX/voicevox/issues/2007
-    "macOSだと原因不明でテストが落ちるためスキップします",
-  );
   await page.waitForTimeout(500);
 
   // 通知されている

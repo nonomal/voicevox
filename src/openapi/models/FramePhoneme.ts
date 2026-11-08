@@ -1,8 +1,8 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * VOICEVOX Engine
- * VOICEVOXの音声合成エンジンです。
+ * VOICEVOX ENGINE OSS
+ * VOICEVOX OSS の音声合成エンジンです。
  *
  * The version of the OpenAPI document: latest
  * 
@@ -14,23 +14,29 @@
 
 import { exists, mapValues } from '../runtime';
 /**
- * 音素の情報
+ * 音素の情報。
  * @export
  * @interface FramePhoneme
  */
 export interface FramePhoneme {
     /**
-     * 
+     * 音素
      * @type {string}
      * @memberof FramePhoneme
      */
     phoneme: string;
     /**
-     * 
+     * 音素のフレーム長
      * @type {number}
      * @memberof FramePhoneme
      */
     frameLength: number;
+    /**
+     * 
+     * @type {string}
+     * @memberof FramePhoneme
+     */
+    noteId?: string | null;
 }
 
 /**
@@ -56,6 +62,7 @@ export function FramePhonemeFromJSONTyped(json: any, ignoreDiscriminator: boolea
         
         'phoneme': json['phoneme'],
         'frameLength': json['frame_length'],
+        'noteId': !exists(json, 'note_id') ? undefined : json['note_id'],
     };
 }
 
@@ -70,6 +77,7 @@ export function FramePhonemeToJSON(value?: FramePhoneme | null): any {
         
         'phoneme': value.phoneme,
         'frame_length': value.frameLength,
+        'note_id': value.noteId,
     };
 }
 

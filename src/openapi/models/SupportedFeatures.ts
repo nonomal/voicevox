@@ -1,8 +1,8 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * VOICEVOX Engine
- * VOICEVOXの音声合成エンジンです。
+ * VOICEVOX ENGINE OSS
+ * VOICEVOX OSS の音声合成エンジンです。
  *
  * The version of the OpenAPI document: latest
  * 
@@ -14,71 +14,95 @@
 
 import { exists, mapValues } from '../runtime';
 /**
- * エンジンが持つ機能の一覧
+ * エンジンが持つ機能の一覧。
  * @export
  * @interface SupportedFeatures
  */
 export interface SupportedFeatures {
     /**
-     * 
+     * モーラごとの音高の調整
      * @type {boolean}
      * @memberof SupportedFeatures
      */
     adjustMoraPitch: boolean;
     /**
-     * 
+     * 音素ごとの長さの調整
      * @type {boolean}
      * @memberof SupportedFeatures
      */
     adjustPhonemeLength: boolean;
     /**
-     * 
+     * 全体の話速の調整
      * @type {boolean}
      * @memberof SupportedFeatures
      */
     adjustSpeedScale: boolean;
     /**
-     * 
+     * 全体の音高の調整
      * @type {boolean}
      * @memberof SupportedFeatures
      */
     adjustPitchScale: boolean;
     /**
-     * 
+     * 全体の抑揚の調整
      * @type {boolean}
      * @memberof SupportedFeatures
      */
     adjustIntonationScale: boolean;
     /**
-     * 
+     * 全体の音量の調整
      * @type {boolean}
      * @memberof SupportedFeatures
      */
     adjustVolumeScale: boolean;
     /**
-     * 
+     * 句読点などの無音時間の調整
+     * @type {boolean}
+     * @memberof SupportedFeatures
+     */
+    adjustPauseLength?: boolean;
+    /**
+     * 疑問文の自動調整
      * @type {boolean}
      * @memberof SupportedFeatures
      */
     interrogativeUpspeak: boolean;
     /**
-     * 
+     * 2種類のスタイルでモーフィングした音声を合成
      * @type {boolean}
      * @memberof SupportedFeatures
      */
     synthesisMorphing: boolean;
     /**
-     * 
+     * 歌唱音声合成
      * @type {boolean}
      * @memberof SupportedFeatures
      */
     sing?: boolean;
     /**
-     * 
+     * 音声ライブラリのインストール・アンインストール
      * @type {boolean}
      * @memberof SupportedFeatures
      */
     manageLibrary?: boolean;
+    /**
+     * キャラクター情報のリソースをURLで返送
+     * @type {boolean}
+     * @memberof SupportedFeatures
+     */
+    returnResourceUrl?: boolean;
+    /**
+     * 未知の英単語をカタカナ読みに変換
+     * @type {boolean}
+     * @memberof SupportedFeatures
+     */
+    applyKatakanaEnglish?: boolean;
+    /**
+     * ストリーミング音声合成
+     * @type {boolean}
+     * @memberof SupportedFeatures
+     */
+    streamingSynthesis?: boolean;
 }
 
 /**
@@ -114,10 +138,14 @@ export function SupportedFeaturesFromJSONTyped(json: any, ignoreDiscriminator: b
         'adjustPitchScale': json['adjust_pitch_scale'],
         'adjustIntonationScale': json['adjust_intonation_scale'],
         'adjustVolumeScale': json['adjust_volume_scale'],
+        'adjustPauseLength': !exists(json, 'adjust_pause_length') ? undefined : json['adjust_pause_length'],
         'interrogativeUpspeak': json['interrogative_upspeak'],
         'synthesisMorphing': json['synthesis_morphing'],
         'sing': !exists(json, 'sing') ? undefined : json['sing'],
         'manageLibrary': !exists(json, 'manage_library') ? undefined : json['manage_library'],
+        'returnResourceUrl': !exists(json, 'return_resource_url') ? undefined : json['return_resource_url'],
+        'applyKatakanaEnglish': !exists(json, 'apply_katakana_english') ? undefined : json['apply_katakana_english'],
+        'streamingSynthesis': !exists(json, 'streaming_synthesis') ? undefined : json['streaming_synthesis'],
     };
 }
 
@@ -136,10 +164,14 @@ export function SupportedFeaturesToJSON(value?: SupportedFeatures | null): any {
         'adjust_pitch_scale': value.adjustPitchScale,
         'adjust_intonation_scale': value.adjustIntonationScale,
         'adjust_volume_scale': value.adjustVolumeScale,
+        'adjust_pause_length': value.adjustPauseLength,
         'interrogative_upspeak': value.interrogativeUpspeak,
         'synthesis_morphing': value.synthesisMorphing,
         'sing': value.sing,
         'manage_library': value.manageLibrary,
+        'return_resource_url': value.returnResourceUrl,
+        'apply_katakana_english': value.applyKatakanaEnglish,
+        'streaming_synthesis': value.streamingSynthesis,
     };
 }
 

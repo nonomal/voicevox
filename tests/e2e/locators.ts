@@ -1,4 +1,5 @@
-import { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
+import { ensureNotNullish } from "@/type/utility";
 
 /**
  * 最新のquasarダイアログのlocatorを取得する
@@ -12,5 +13,22 @@ export function getNewestQuasarDialog(page: Page) {
  * quasarのメニューのlocatorを取得する
  */
 export function getQuasarMenu(page: Page, menuName: string) {
-  return page.getByRole("listitem").filter({ hasText: menuName });
+  return page
+    .getByRole("list")
+    .getByRole("button")
+    .filter({ hasText: menuName });
+}
+
+/** Locator の配列を x 座標でソートする */
+export async function fetchLocatorsSortedByX(
+  locators: Locator[],
+): Promise<Locator[]> {
+  const locatorsWithPosition = await Promise.all(
+    locators.map(async (locator) => ({
+      locator,
+      x: ensureNotNullish(await locator.boundingBox()).x,
+    })),
+  );
+  locatorsWithPosition.sort((a, b) => a.x - b.x);
+  return locatorsWithPosition.map(({ locator }) => locator);
 }

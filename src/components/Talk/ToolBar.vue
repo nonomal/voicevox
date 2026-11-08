@@ -1,13 +1,13 @@
 <template>
   <QHeader class="q-py-sm">
     <QToolbar>
-      <template v-for="button in buttons" :key="button.text">
-        <QSpace v-if="button.text === null" />
+      <template v-for="(button, index) in buttons" :key="index">
+        <QSpace v-if="button.text == null" />
         <QBtn
           v-else
           unelevated
           color="toolbar-button"
-          text-color="toolbar-button-display"
+          textColor="toolbar-button-display"
           class="text-no-wrap text-bold q-mr-sm"
           :disable="button.disable.value"
           @click="button.click"
@@ -19,14 +19,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ComputedRef } from "vue";
-import {
-  generateAndConnectAndSaveAudioWithDialog,
-  multiGenerateAndSaveAudioWithDialog,
-  generateAndSaveOneAudioWithDialog,
-} from "@/components/Dialog/Dialog";
+import { computed, type ComputedRef } from "vue";
 import { useStore } from "@/store";
-import { ToolbarButtonTagType } from "@/type/preload";
+import type { ToolbarButtonTagType } from "@/type/preload";
 import { getToolbarButtonName } from "@/store/utility";
 import { useHotkeyManager } from "@/plugins/hotkeyPlugin";
 import { handlePossiblyNotMorphableError } from "@/store/audioGenerate";
@@ -80,72 +75,46 @@ registerHotkeyWithCleanup({
       if (nowPlayingContinuously.value) {
         stop();
       } else {
-        playContinuously();
+        void playContinuously();
       }
     }
   },
 });
 
 const undo = () => {
-  store.dispatch("UNDO", { editor });
+  void store.actions.UNDO({ editor });
 };
 const redo = () => {
-  store.dispatch("REDO", { editor });
+  void store.actions.REDO({ editor });
 };
 const playContinuously = async () => {
   try {
-    await store.dispatch("PLAY_CONTINUOUSLY_AUDIO");
+    await store.actions.START_CONTINUOUS_PLAYBACK();
   } catch (e) {
     const msg = handlePossiblyNotMorphableError(e);
-    store.dispatch("SHOW_ALERT_DIALOG", {
+    void store.actions.SHOW_ALERT_DIALOG({
       title: "再生に失敗しました",
       message: msg ?? "エンジンの再起動をお試しください。",
     });
   }
 };
 const stop = () => {
-  store.dispatch("STOP_AUDIO");
+  void store.actions.STOP_PLAYBACK();
 };
 const generateAndSaveSelectedAudio = async () => {
-  if (activeAudioKey.value == undefined)
-    throw new Error("activeAudioKey is undefined");
-
-  const selectedAudioKeys = store.getters.SELECTED_AUDIO_KEYS;
-  if (
-    store.state.experimentalSetting.enableMultiSelect &&
-    selectedAudioKeys.length > 1
-  ) {
-    await multiGenerateAndSaveAudioWithDialog({
-      audioKeys: selectedAudioKeys,
-      dispatch: store.dispatch,
-      disableNotifyOnGenerate: store.state.confirmedTips.notifyOnGenerate,
-    });
-  } else {
-    await generateAndSaveOneAudioWithDialog({
-      audioKey: activeAudioKey.value,
-      disableNotifyOnGenerate: store.state.confirmedTips.notifyOnGenerate,
-      dispatch: store.dispatch,
-    });
-  }
+  await store.actions.SHOW_GENERATE_AND_SAVE_SELECTED_AUDIO_FILE_DIALOG();
 };
 const generateAndSaveAllAudio = async () => {
-  await multiGenerateAndSaveAudioWithDialog({
-    audioKeys: store.state.audioKeys,
-    dispatch: store.dispatch,
-    disableNotifyOnGenerate: store.state.confirmedTips.notifyOnGenerate,
-  });
+  await store.actions.SHOW_GENERATE_AND_SAVE_ALL_AUDIO_FILE_DIALOG();
 };
 const generateAndConnectAndSaveAudio = async () => {
-  await generateAndConnectAndSaveAudioWithDialog({
-    dispatch: store.dispatch,
-    disableNotifyOnGenerate: store.state.confirmedTips.notifyOnGenerate,
-  });
+  await store.actions.SHOW_GENERATE_AND_CONNECT_ALL_AUDIO_FILE_DIALOG();
 };
 const saveProject = async () => {
-  await store.dispatch("SAVE_PROJECT_FILE", { overwrite: true });
+  await store.actions.SAVE_PROJECT_FILE_OVERWRITE();
 };
 const importTextFile = () => {
-  store.dispatch("COMMAND_IMPORT_FROM_FILE", {});
+  void store.actions.COMMAND_IMPORT_FROM_FILE({ type: "dialog" });
 };
 
 const usableButtons: Record<
